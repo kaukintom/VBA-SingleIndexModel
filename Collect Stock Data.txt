@@ -1,0 +1,348 @@
+Option Explicit
+
+Const Tablebegin = 7
+'When changing the where the table begins, make sure to add a space manually _
+between the table and the data above it so it begins at row = 5
+Const ColBegin = 1
+'Const ColCSV = 8
+Const SDRowBegin = 3
+
+Sub TickerDataCollect()
+Dim SDSheet As Worksheet
+Dim HistData As Variant
+Dim html As Variant
+Dim ScrollDown As Integer, Trow As Integer
+Dim Div As Integer, Stock As String
+Dim Row As Integer, Col As Integer
+Dim Tlist As Variant, SLSheet As Worksheet
+Dim TData As Variant, TlistI As Variant, Tcol As Integer
+Dim BSLrow As Integer, GSLrow As Integer, Inclusion As Integer
+Dim APIkey As Variant, STable As Worksheet, Class As Integer
+Dim Clist As Variant, Crow As Integer, CorT As Boolean, AllPer As Integer
+Dim UpperDate As String, LowerDate As String, LDArray As Variant, DateArray As Variant
+Dim PrevDate As Integer, SkipDate As Boolean, CutoffDate As String
+Dim CurrentPArray As Variant, Price As Double, PDSheet As Worksheet
+'reference point for locations on worksheet
+'*******************************
+Row = 1
+Col = 1
+Inclusion = 3 ' column location to determine whether the stock data was found
+Class = 2 'column containing the index for the stock
+'******************************
+
+Application.ScreenUpdating = False
+Application.Calculation = xlManual
+
+'define worksheet objects
+Set SDSheet = Sheets("Stock Data")
+Set SLSheet = Sheets("Stock List")
+Set PDSheet = Sheets("Price Data")
+'Set STable = Sheets("Stock Table")
+
+AllPer = SLSheet.Cells(4, 2) ' allocation period (months)
+
+APIkey = SLSheet.Cells(Row, Col + 1).Value 'Alpha Vantage API key
+If IsEmpty(APIkey) = False Then
+    SLSheet.Cells(4, 2).Interior.Color = RGB(255, 255, 255)
+    SDSheet.Select
+    ReDim Clist(1 To 1, 1 To 1) 'define array of the index used
+    
+    SLSheet.Select
+    Tlist = SLSheet.Cells(Tablebegin, Col).CurrentRegion ' Array of Ticker symbols for securities
+    
+    ReDim CurrentPArray(LBound(Tlist) To UBound(Tlist, 1), LBound(Tlist) To 2)
+    CurrentPArray(LBound(CurrentPArray), LBound(CurrentPArray)) = "Symbol"
+    CurrentPArray(LBound(CurrentPArray), UBound(CurrentPArray, 2)) = "Current Price"
+    
+    
+    Range(Cells(Tablebegin + 1, Inclusion), Cells(UBound(Tlist, 1) + Tablebegin, Inclusion)).ClearContents 'clear _
+    the current tables contents in the inclusion column
+    
+    SDSheet.Select
+    SDSheet.UsedRange.Delete 'clear worksheet
+    'For each security, download the historical prices from Alpha Vantage
+    CorT = True ' If true, the stock data is found and recorded
+    
+    For Trow = LBound(Tlist) + 1 To UBound(Tlist, 1)
+        Stock = Tlist(Trow, 1)
+        Call Transfer_csv(Stock, SDSheet, Row, Col, Tlist, Trow, APIkey, Inclusion, Class, CorT, CurrentPArray, Price)
+        CurrentPArray(Trow, 1) = Stock
+        CurrentPArray(Trow, 2) = Price
+    Next Trow
+    
+    For Trow = LBound(Tlist, 1) + 1 To UBound(Tlist, 1)
+        If IsEmpty(Clist(LBound(Clist, 1), 1)) = False And Tlist(Trow, Inclusion) = "Y" Then
+            For Crow = LBound(Clist, 1) To UBound(Clist, 1)
+                If Clist(Crow, 1) = Tlist(Trow, Class) Then
+                    Exit For
+                End If
+                
+                WorksheetFunction.Transpose (Clist)
+                ReDim Preserve Clist(LBound(Clist, 1) To UBound(Clist, 1), LBound(Clist, 2) To UBound(Clist, 2) + 1)
+                WorksheetFunction.Transpose (Clist)
+                Clist(UBound(Clist, 1), 1) = Tlist(Trow, Class)
+                
+            Next Crow
+        ElseIf IsEmpty(Clist(LBound(Clist, 1), 1)) = True And Tlist(Trow, Inclusion) = "Y" Then
+    
+            Clist(LBound(Clist, 1), 1) = Tlist(Trow, Class)
+    
+        End If
+    Next Trow
+    CorT = False
+    For Crow = LBound(Clist) To UBound(Clist, 1)
+        Stock = Clist(Crow, 1)
+        Call Transfer_csv(Stock, SDSheet, Row, Col, Tlist, Trow, APIkey, Inclusion, Class, CorT, CurrentPArray, Price)
+    Next Crow
+    SLSheet.Cells(Tablebegin, ColBegin).Resize(UBound(Tlist), UBound(Tlist, 2)).Value = Tlist
+    
+    SLSheet.Cells(1, 4).Value = "Index"
+    WorksheetFunction.Transpose (Clist)
+    SLSheet.Cells(1, 5).Resize(UBound(Clist), UBound(Clist, 2)).Value = Clist
+    
+    Call Delete_NoData_Cells 'deletes any pricing data, for all stocks, which contains no data
+    
+    Call Return_Variance 'finds the mean and standard deviation for each stock
+    SLSheet.Columns.AutoFit
+    SDSheet.Columns.AutoFit
+    
+    Call AllocationPeriod 'deletes the data deyond the allocation period
+    
+    PDSheet.Cells(Row, ColBegin).Resize(UBound(CurrentPArray), UBound(CurrentPArray, 2)).Value = CurrentPArray
+    PDSheet.Columns.AutoFit
+Else
+    SLSheet.Cells(4, 2).ColorIndex = RGB(255, 0, 0)
+End If
+Application.ScreenUpdating = True
+Application.Calculation = xlAutomatic
+End Sub
+
+Sub Transfer_csv(Stock, SDSheet, Row, Col, Tlist, Trow, APIkey, Inclusion, Class, CorT, CurrentPArray, Price)
+Dim TData As Variant, Dcol As Integer, Drow As Integer
+Dim TDC As Workbook, SDArray As Variant
+Dim sCSVLink As String, RPeriod As Double
+Dim ieApp As Object, Main As String
+
+Main = ActiveWorkbook.Name
+'the link needed to find the pricing data
+sCSVLink = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=" & Stock & "&apikey=" & APIkey & "&datatype=csv"
+
+Set TDC = ActiveWorkbook 'define the active workbook to refer to later
+
+Workbooks.Open Filename:=sCSVLink 'open the link through internet explorer
+Application.Wait (Now + TimeValue("00:00:05")) 'temporary solution to ensure the stock data is fully downloaded
+
+Do Until ActiveWorkbook.Name <> Main
+    DoEvents
+Loop
+TData = ActiveSheet.UsedRange 'the csv is put into an array
+'will have greater than 3 columns if stock data exists
+Do Until UBound(TData, 1) >= 3
+    DoEvents
+    TData = ActiveSheet.UsedRange
+Loop
+
+TData = ActiveSheet.UsedRange 'the csv is put into an array
+'will have greater than 3 columns if stock data exists
+
+'TData = ActiveSheet.UsedRange 'put the data from the csv file in an array
+ActiveWorkbook.Close 'close the workbook containing the data
+TDC.Activate 'Make the main workbook active
+'Put the Stock pricing data and name of stock in the workbook
+SDSheet.Cells(Row, Col).Value = Stock
+SDSheet.Cells(Row + 1, Col).Resize(UBound(TData), UBound(TData, 2)).Value = TData
+
+'will analyze the data if it is found
+If UBound(TData, 2) > 1 Then
+    
+    SDArray = SDSheet.UsedRange 'redefine array to incorporate the addtional stock data
+    'loop through the second row of the worksheet to elminate all columns of data that are unnecessary
+    For Dcol = UBound(SDArray, 2) To (UBound(SDArray, 2) - (UBound(TData, 2) - 1)) Step -1
+        If SDArray(Row + 1, Dcol) = "close" Then
+            If CorT = True Then Price = SDArray(Row + 2, Dcol)
+            Cells(Row + 1, Dcol).EntireColumn.Delete
+        ElseIf SDArray(Row + 1, Dcol) <> "adjusted_close" And SDArray(Row + 1, Dcol) <> "timestamp" And SDArray(Row + 1, Dcol) <> "Return" Then
+            Cells(Row + 1, Dcol).EntireColumn.Delete
+        End If
+    Next Dcol
+    
+    'Add a new column to determine the return for each data and redefine array to _
+    incorporate the new format with the deleted columns
+    SDSheet.Cells(Row + 1, Col + 2).Value = "Return"
+    SDArray = SDSheet.UsedRange
+    
+    'loop through each date to give the % return for that date
+    For Drow = Row + 2 To UBound(SDArray, 1) 'starts at latest date
+        If Drow <> UBound(SDArray, 1) Then 'make sure that it doesnt loop beyond the upper bound of the array
+            'make sure that a cell is not empty, or equal to 0, so that the return data can actually be found
+            If IsEmpty(SDArray(Drow + 1, Col + 1)) = False And IsNumeric(SDArray(Drow + 1, Col + 1)) = True And IsNumeric(SDArray(Drow, Col + 1)) = True And SDArray(Drow, Col + 1) <> 0 And SDArray(Drow + 1, Col + 1) <> 0 Then
+                RPeriod = SDArray(Drow, Col + 1) / SDArray(Drow + 1, Col + 1) - 1 'calculates percent return
+                SDSheet.Cells(Drow, Col + 2).Value = RPeriod 'put the return on the worksheet
+            ElseIf IsEmpty(SDArray(Drow + 1, Col)) = True Then
+                Exit For
+            End If
+        Else
+            Exit For
+        End If
+    Next Drow
+    If CorT = True Then
+        Tlist(Trow, Inclusion) = "Y"
+        Col = UBound(SDArray, 2) + 1 ' placing for where each table of stock data will appear
+    End If
+    Application.DisplayAlerts = False
+    Application.DisplayAlerts = True
+Else
+    SDSheet.Range(Cells(Row, Col), Cells(Row + 5, Col + 3)).Delete
+    If CorT = True Then
+        Tlist(Trow, Inclusion) = "N"
+    End If
+End If
+
+End Sub
+
+Sub Delete_NoData_Cells()
+'Deletes rows of pricing data, for every stock(for easier comparability), where there is no pricing data
+Dim SDArray As Variant
+Dim SDrow As Integer, SDcol As Integer
+Dim Row As Integer, Col As Integer
+Dim SDSheet As Worksheet
+
+Row = 1
+Col = 1
+Set SDSheet = Sheets("Stock Data")
+
+
+SDArray = SDSheet.UsedRange 'define the sheet containing the stock data
+For SDcol = LBound(SDArray) To UBound(SDArray, 2) 'for each stock on this page
+    If IsEmpty(Cells(Row, SDcol)) = False Then 'finds when a cell contains strings, not numeric
+        For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 1) 'loop throuhg each row of historical price data
+            If IsEmpty(Cells(SDrow, SDcol + 2)) = True And IsEmpty(Cells(SDrow, SDcol)) = False Then
+                Cells(SDrow, SDcol + 2).EntireRow.Delete 'delete row (will affect every stock pricing data)
+                SDArray = SDSheet.UsedRange 'redefine array so that it wont try to delete the same row multiple times
+                SDrow = SDrow - 1 'prevents an forward step to next cell, incase the next cell is also empty
+            End If
+        Next SDrow
+    End If
+Next SDcol
+
+End Sub
+
+Sub Return_Variance()
+Dim SDArray As Variant
+Dim SDrow As Integer, SDcol As Integer
+Dim Row As Integer, Col As Integer
+Dim SDSheet As Worksheet
+Dim MaxRow As Integer
+
+Row = 1
+Col = 1
+Set SDSheet = Sheets("Stock Data")
+SDSheet.Select
+'define array of worksheet containing stock data
+SDArray = SDSheet.UsedRange
+MaxRow = 0
+For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 1)
+    For SDcol = LBound(SDArray) To UBound(SDArray, 2)
+        If IsEmpty(SDArray(SDrow, SDcol)) = True Then
+            MaxRow = SDrow
+            Exit For
+        End If
+    Next SDcol
+    If MaxRow <> 0 Then Exit For
+Next SDrow
+
+'loop through the first row of columns on worksheet to identify stocks
+For SDcol = LBound(SDArray) To UBound(SDArray, 2)
+
+    'if a stock is present, finds it's mean return and standard deviation
+    If IsNumeric(Cells(Row, SDcol)) = False Then
+        Cells(Row, SDcol + 1).Value = WorksheetFunction.Average(Range(Cells(Row + 2, SDcol + 2), Cells(UBound(SDArray, 1), SDcol + 2)))
+        Cells(Row, SDcol + 2).Value = WorksheetFunction.Var_S(Range(Cells(Row + 2, SDcol + 2), Cells(UBound(SDArray, 1), SDcol + 2)))
+
+    End If
+Next SDcol
+
+End Sub
+
+Sub AllocationPeriod()
+Dim SDSheet As Worksheet
+Dim HistData As Variant
+Dim html As Variant
+Dim ScrollDown As Integer, Trow As Integer
+Dim Div As Integer, Stock As String
+Dim Row As Integer, Col As Integer
+Dim Tlist As Variant, SLSheet As Worksheet
+Dim TData As Variant, TlistI As Variant, Tcol As Integer
+Dim BSLrow As Integer, GSLrow As Integer, Inclusion As Integer
+Dim APIkey As Variant, STable As Worksheet, Class As Integer
+Dim Clist As Variant, Crow As Integer, CorT As Boolean, AllPer As Integer
+Dim UpperDate As String, LowerDate As String, LDArray As Variant, DateArray As Variant
+Dim PrevDate As Integer, SkipDate As Boolean, CutoffDate As String, SDArray As Variant
+Dim SDrow As Integer
+'reference point for locations on worksheet
+'Set names for worksheets
+Set SDSheet = Sheets("Stock Data")
+Set SLSheet = Sheets("Stock List")
+
+'arbitrary starting position
+Row = 1
+Col = 1
+
+'Array of Stock Data sheet
+SDSheet.Select
+SDArray = SDSheet.UsedRange
+
+'period of how far back to look (in months)
+AllPer = SLSheet.Cells(4, 2)
+
+UpperDate = SDArray(Row + 2, Col) 'most recent date of stock data
+LDArray = Split(UpperDate, "-") 'split date to determine year/month/day
+SkipDate = False
+LowerDate = CInt(LDArray(LBound(LDArray) + 1)) - AllPer 'changes month component to refelct how far back to _
+look
+
+If LowerDate < 1 Then 'if the month is less than 1 (cant have a 0 or -ve number for any date component) _
+then the year is moved back 1 and the add the negative component to 12 to represent the previous year
+    LowerDate = 12 + LowerDate
+    LDArray(LBound(LDArray)) = CInt(LDArray(LBound(LDArray))) - 1 'year is hte first component, have to subtract _
+    it by 1
+    LDArray(LBound(LDArray) + 1) = LowerDate 'month is the middle compnent
+End If
+
+'Go through each row in the stock data array in the first column (contains dates)
+For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 2)
+    ' the date is split apart to analyze the components
+    DateArray = Split(SDArray(SDrow, 1), "-")
+    If CInt(DateArray(LBound(DateArray) + 1)) = LowerDate Then 'if the month in the date is exactly what matches the _
+    amount of months to look in the past, then the day component can now be analyzed and the cutoff date for stock _
+    data can be found
+        If CInt(DateArray(UBound(DateArray))) = CInt(LDArray(UBound(LDArray))) Then 'the exact day, in LowerDate
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) < CInt(LDArray(UBound(LDArray))) Then 'if the date in the month is now below the actual _
+        day (ex. could corrospond ot a weekend so there is no date for exact amount of months back)
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) < CInt(LDArray(UBound(LDArray) - 1)) Then
+            'if the next available date could be in the previous month, which would occur if the previous 2 conditions _
+            are passed on, so the date would be higher, and month lower than the exact date, months back
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) > CInt(LDArray(UBound(LDArray) - 1)) And CInt(LDArray(UBound(LDArray) - 1)) = 1 Then
+            'in case the month back goes into the previous year, then the year, month and day all need to change where _
+            year is less, and month and day are both higher
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        End If
+    End If
+Next SDrow
+
+SLSheet.Cells(5, 2).Value = SDrow - 2
+
+End Sub
+
+

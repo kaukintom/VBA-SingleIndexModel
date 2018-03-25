@@ -1,0 +1,896 @@
+Option Explicit
+
+Const Tablebegin = 7
+'When changing the where the table begins, make sure to add a space manually _
+between the table and the data above it so it begins at row = 5
+Const ColBegin = 1
+Const SDRowBegin = 3
+Const IndexBegin = 4
+
+Sub OLSRegression()
+'This procuedure calculates the regression parameters, which are then used to find _
+the market portfolio and optimal integer value allocations for the portfolio
+'should go in main program (must include: Inclusion, Clist)
+Dim StockArray As Variant, IndexArray As Variant
+Dim Stock As Integer, Crow As Integer, SLSheet As Worksheet
+Dim SDSheet As Worksheet, Tlist As Variant
+Dim HistData As Variant, StockCol As Integer, Hcol As Integer, SDcol As Integer
+Dim ActualReturn As Double, ActRet As Double, Rf As Double, Beta As Double, Alpha As Double
+Dim ExpectedReturn As Double, CovXY As Double, VarX As Double, AlphaSum As Double
+Dim Obs As Integer, IndexReturn As Double, IndexVar As Double
+Dim Aloc As Integer, Bloc As Integer, ERloc As Integer, Sloc As Integer, Wloc As Integer
+Dim VarCol As Integer, Fixedcol As Integer, Tcol As Integer, Clist As Variant
+Dim Inclusion As Integer, Drow As Integer, VarResRetArray As Variant, VarResRet As Double
+Dim RRVloc As Integer, VRRrow As Integer, EROBloc As Integer, EROBString As String, BString As String, ERString As String
+Dim RRVstring As String, WeightString As String, PhiString As String, Stockloc As Integer
+Dim SearchWeight As String, SearchBeta As String, SearchAlpha As String, SearchER As String, SearchRRV As String
+Dim SearchPhi As String, SearchEROB As String, SearchAR As String, AllSheet As Worksheet
+Dim ArrayCorrection As Variant, DataP As Integer, OpenStockDays As Integer, SDrows As Integer
+Dim DV As Double, SearchDV As String, MoveOver As Integer, SaveTable As Variant
+
+Application.ScreenUpdating = False
+Application.Calculation = xlManual
+
+Call AllocationPeriod ' finds the data points to be used for regression
+
+Inclusion = 3
+'**********************
+'These variables are the locations of the headings in the table in sheet _
+Stock List
+Aloc = 1
+Bloc = 2
+ERloc = 3
+RRVloc = 4
+EROBloc = 5
+Sloc = 6
+Wloc = 7
+'**********************
+DataP = Cells(5, 2)
+OpenStockDays = 252 ' rough estimate to determine the daily risk free interest rate
+'**********************
+SearchDV = "Investment"
+SearchWeight = "Weight"
+SearchBeta = "Beta (B)"
+SearchER = "Expected Return (R)"
+SearchRRV = "Residual Return Variance"
+SearchPhi = "Phi"
+SearchAlpha = "Alpha"
+SearchEROB = "Expected R Over B"
+SearchAR = "Actual Return"
+
+VarCol = Wloc 'Allows the headings to be dynamically adjusted _
+for a multi index model (will expand for every index)
+
+
+Set SLSheet = Sheets("Stock List")
+Set SDSheet = Sheets("Stock Data")
+Set AllSheet = Sheets("Allocation")
+
+SLSheet.Select
+
+SDrows = Cells(5, 2).Value + 2
+DV = SLSheet.Cells(3, 2).Value
+Rf = (1 + Cells(2, 2).Value) ^ (1 / 252) - 1 'Risk Free Rate location
+
+Clist = Cells(1, IndexBegin).CurrentRegion 'Index Location, it is put into an array for the potential to add _
+more indexes for an multi index model
+
+'Temporary hard code for putting the index into an array
+ReDim Clist(1 To UBound(Clist, 1), 1 To 1)
+Clist(1, 1) = Cells(1, IndexBegin + 1).Value
+
+'Find location of where the actual stock return will be placed
+Tlist = SLSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+For Tcol = LBound(Tlist) To UBound(Tlist, 2)
+    If Tlist(1, Tcol) = SearchAR Then
+        Fixedcol = Tcol
+        Exit For
+    End If
+Next Tcol
+
+ActRet = Fixedcol 'This is the number of fixed columns, columns that wont ever have to _
+be dynamically added
+
+'Delete contents of current table(except for fixed items)
+Range(Cells(Tablebegin, Fixedcol + 1), Cells(UBound(Tlist, 1) + Tablebegin, UBound(Tlist, 2) + 1)).Delete
+
+'Create array from table (contains all the relevent stock information)
+Tlist = SLSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+
+HistData = SDSheet.UsedRange 'Create array of worksheet where all the stock data is located
+SDSheet.Select
+
+'Loop through each index (currently only 1)
+For Crow = LBound(Clist) To UBound(Clist, 1)
+    'Headings are now placed in the table for each index, according to a hard coded location _
+    in relation to how large the TList array was (values are being added to table on the worksheet _
+    and the TList array will be redefined with the new values
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Aloc).Value = SearchAlpha
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Bloc).Value = SearchBeta
+    BString = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Bloc).Value
+    
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + ERloc).Value = SearchER
+    ERString = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + ERloc).Value
+    
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + RRVloc).Value = SearchRRV
+    RRVstring = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + RRVloc).Value
+    
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Sloc).Value = SearchPhi
+
+    PhiString = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Sloc).Value
+    
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + EROBloc).Value = SearchEROB
+    EROBString = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + EROBloc).Value
+
+    SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Wloc).Value = SearchWeight
+    WeightString = SLSheet.Cells(Tablebegin, UBound(Tlist, 2) + Wloc).Value
+    Tlist = SLSheet.Cells(Tablebegin, ColBegin).CurrentRegion 'Table redefined
+    
+    'This loop finds the index historical data
+    For Hcol = UBound(HistData, 2) To LBound(HistData, 2) Step -1
+        If HistData(1, Hcol) = Clist(Crow, 1) Then
+            'an array created from its historical return data is created
+            IndexArray = Range(Cells(SDRowBegin, Hcol + 2), Cells(SDrows, Hcol + 2))
+            IndexReturn = SDSheet.Cells(1, Hcol + 1) 'Actual Return
+            IndexVar = SDSheet.Cells(1, Hcol + 2) 'Variance
+            VarX = IndexVar
+            Exit For
+        End If
+    Next Hcol
+    
+    StockCol = 1
+    'The list is looped through according to the stock symbol so it can be found in _
+    the stock data array (HistData)
+    For Stock = LBound(Tlist) + 1 To UBound(Tlist, 1)
+        'If the data for the stock was retrieved (from a prior sub procedure)
+        If Tlist(Stock, Inclusion) = "Y" Then
+            'Loop through the historical data worksheet until the stock is found
+            For Hcol = LBound(HistData, 2) To UBound(HistData, 2)
+                'When the symbol is found, the regression parameters need to be calculated
+                If HistData(1, Hcol) = Tlist(Stock, 1) Then
+                    'An array of the stock return data is created
+                    StockArray = Range(Cells(SDRowBegin, Hcol + 2), Cells(SDrows, Hcol + 2))
+                
+                    Obs = UBound(StockArray, 1) 'Number of obsverations of return data
+                    StockCol = Hcol 'Location of stockdata
+                    
+                    ActualReturn = HistData(1, Hcol + 1) 'Actual mean return of stock
+                    Tlist(Stock, ActRet) = ActualReturn
+                    
+                    CovXY = WorksheetFunction.Covariance_S(IndexArray, StockArray) ' covariance between stock and index
+                    Beta = CovXY / VarX 'Beta (slope of regression)
+                    
+                    AlphaSum = 0
+                    'Calculates the alpha value from the regression(Y-int)
+                    For Drow = LBound(IndexArray) To UBound(IndexArray, 1)
+                        AlphaSum = StockArray(Drow, 1) - Beta * IndexArray(Drow, 1) + AlphaSum
+                    Next Drow
+                    Alpha = AlphaSum / Obs
+                    
+                    'Expected return is calculcated, and the regression paramters are put into TList
+                    ExpectedReturn = Alpha + Beta * IndexReturn
+                    Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + Aloc) = Alpha
+                    Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + Bloc) = Beta
+                    Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + ERloc) = ExpectedReturn
+                    Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + EROBloc) = Round((ExpectedReturn - Rf) / Beta, 8)
+                    If Beta < 0 And ExpectedReturn < 0 Then Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + EROBloc) = -1000
+                    VarResRet = 0
+                    
+                    'calculating the variance of the residual returns
+                    For VRRrow = LBound(StockArray, 1) To UBound(StockArray, 1)
+                        VarResRet = VarResRet + (StockArray(VRRrow, 1) - ExpectedReturn) ^ 2
+                    Next VRRrow
+                    VarResRet = VarResRet / UBound(StockArray, 1)
+                    Tlist(Stock, Fixedcol + (Crow - 1) * VarCol + RRVloc) = VarResRet
+
+                    Exit For
+                End If
+            Next Hcol
+        End If
+    Next Stock
+Next Crow
+'The Tlist Array is placed onto the Stock List worksheet
+SLSheet.Cells(Tablebegin, ColBegin).Resize(UBound(Tlist), UBound(Tlist, 2)).Value = Tlist
+SLSheet.Select
+'Sorts the stocks based on excess returns over the Beta value
+Range(Cells(Tablebegin, ColBegin), Cells(UBound(Tlist, 1) + Tablebegin - 1, UBound(Tlist, 2))).Sort key1:=Cells(ColBegin, Fixedcol + (Crow - 2) * VarCol + EROBloc), _
+order1:=xlDescending, Header:=xlYes
+'This procedure calculates the market portfolio for the given set of stocks in TList
+
+Call PhiCalc(Stockloc, SLSheet, SDSheet, EROBString, BString, ERString, IndexVar, Rf, RRVstring, WeightString, PhiString)
+Columns.AutoFit
+'This procedure calculates the integer values for portfolio allocation
+Call Allocation(Stockloc, Tlist, SLSheet, SDSheet, SearchWeight, SearchBeta, SearchER, SearchRRV)
+
+
+With SLSheet
+    .Select
+    Tlist = ActiveSheet.UsedRange
+    Range(Cells(Tablebegin, Inclusion), Cells(UBound(Tlist, 1), UBound(Tlist, 2))).HorizontalAlignment = xlCenter
+    .Columns.AutoFit
+End With
+
+With AllSheet
+    .Select
+    .Cells(1, 1).Value = SearchDV
+    .Cells(1, 2).Value = DV
+End With
+Call WorksheetMaintain
+AllSheet.Select
+Application.ScreenUpdating = True
+Application.Calculation = xlAutomatic
+End Sub
+
+
+Sub PhiCalc(Stockloc, SLSheet, SDSheet, EROBString, BString, ERString, IndexVar, Rf, RRVstring, WeightString, PhiString)
+'Calculates the weights of stocks that should be included in the market portfolio (No Short Selling)
+Dim Tlist As Variant, EROBloc As Integer, Sum1 As Double, Sum2 As Double
+Dim Trow As Integer, Tcol As Integer, Bloc As Integer, ERloc As Integer
+Dim PhiDiff As Double, AddStock As Integer, MaxRet As Variant, MinVar As Variant
+Dim RRVloc As Integer, Phi As Double, Weight As Double, WeightArray As Variant
+Dim Philoc As Integer, Weightloc As Integer, PrevPhi As Double, TotalWeight As Double
+
+Tlist = SLSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+'Finds location of all relevent parameters from the headings of the TList array
+For Tcol = LBound(Tlist, 2) To UBound(Tlist, 2)
+    If Tlist(ColBegin, Tcol) = EROBString Then
+        EROBloc = Tcol
+    ElseIf Tlist(ColBegin, Tcol) = BString Then
+        Bloc = Tcol
+    ElseIf Tlist(ColBegin, Tcol) = ERString Then
+        ERloc = Tcol
+    ElseIf Tlist(ColBegin, Tcol) = RRVstring Then
+        RRVloc = Tcol
+    ElseIf Tlist(ColBegin, Tcol) = WeightString Then
+        Weightloc = Tcol
+    ElseIf Tlist(ColBegin, Tcol) = PhiString Then
+        Philoc = Tcol
+    End If
+Next Tcol
+
+PhiDiff = 0 'Difference in the value of Phi (needs to be positive to always include a stock)
+AddStock = 1 '# of stocks that have been evaluated
+PrevPhi = 0 'Keeps track of previous Phi value to compare to new Phi value and find PhiDiff
+Do While PhiDiff >= 0
+    'Sum1 and Sum2 need to be reset to zero since this sum always needs to be recalculated when _
+    an additional stock is added
+    Sum1 = 0
+    Sum2 = 0
+    
+    'Every Stock included in the Phi calculations is used to calculated sum1 and sum2
+    'number of stocks included is represetned by AddStock
+    For Trow = LBound(Tlist, 1) + 1 To LBound(Tlist, 1) + AddStock
+        Sum1 = Tlist(Trow, Bloc) * (Tlist(Trow, ERloc) - Rf) / RRVloc + Sum1
+        Sum2 = (Tlist(Trow, Bloc) ^ 2) / Tlist(Trow, RRVloc) + Sum2
+    Next Trow
+    
+    'Phi is calculated using the index Variance times sum1 divided by (1 plus index variance times sum2)
+    Phi = IndexVar * Sum1 / (1 + IndexVar * Sum2)
+    Stockloc = LBound(Tlist, 1) + AddStock 'Actual location of added stock within TList
+    'The weight of the stock that comprises the portfolio in percetnage terms
+    Weight = Tlist(Stockloc, Bloc) / Tlist(Stockloc, RRVloc) * (Tlist(Stockloc, EROBloc) - Phi)
+    
+    If AddStock > 1 Then 'if more than 1 stock is included, otherwise there is no other _
+    previous Phi value to compare the new Phi value to
+        PrevPhi = Tlist(Stockloc - 1, Philoc)
+    End If
+    
+    PhiDiff = Phi - PrevPhi 'Calculates Phi difference
+    If PhiDiff >= 0 Then 'if the difference is positive then include the newest stock towards the market portfolio
+        Tlist(Stockloc, Philoc) = Phi
+        Tlist(Stockloc, Weightloc) = Weight
+    End If
+    AddStock = AddStock + 1 'New stock to be included next loop
+    'Loop will end if PhiDiff is negative
+Loop
+
+'finds how many stocks are included in the market portfolio
+For Trow = LBound(Tlist, 1) + 1 To UBound(Tlist, 1)
+    If IsEmpty(Tlist(Trow, Weightloc)) = True Then
+        Exit For
+    End If
+Next Trow
+'Place the Tlist table with the portfolio weightings onto worksheet
+SLSheet.Cells(Tablebegin, ColBegin).Resize(UBound(Tlist), UBound(Tlist, 2)).Value = Tlist
+ReDim WeightArray(1 To Trow, 1 To 1) 'create and array for the all the weight values
+SLSheet.Select
+WeightArray = Range(Cells(Tablebegin + 1, Weightloc), Cells(Tablebegin + Trow, Weightloc))
+'Total weight does not add to 1, need to adjust values so that the weight values of all stocks combined _
+is the denominator, and the % weight of stocks is their weight value divided by the total weight value
+TotalWeight = WorksheetFunction.Sum(WeightArray)
+'Calculates actual weighting
+For Trow = LBound(Tlist, 1) + 1 To UBound(Tlist, 1)
+    If IsEmpty(Tlist(Trow, Weightloc)) = False Then
+        Tlist(Trow, Weightloc) = Tlist(Trow, Weightloc) / TotalWeight
+    ElseIf IsEmpty(Tlist(Trow, Weightloc)) = True Then 'stop if there is no weight value for stock
+        Exit For
+    End If
+Next Trow
+SLSheet.Cells(Tablebegin, ColBegin).Resize(UBound(Tlist), UBound(Tlist, 2)).Value = Tlist ' place table onto worksheet with new values
+End Sub
+
+Sub Allocation(Stockloc, Tlist, SLSheet, SDSheet, SearchWeight, SearchBeta, SearchER, SearchRRV)
+'This macro finds the amount of each stock that should be purchased in terms of an integer value _
+since fractions of a unit of stock cannot be purchased
+Dim AllArray As Variant, SLrow As Integer, SLcol As Integer
+Dim WeightArray As Variant, StockArray As Variant, PriceArray As Variant
+Dim AllSheet As Worksheet, Tcol As Integer, Srow As Integer, Hcol As Integer
+Dim DV As Double, SLArray As Variant, SearchSym As String, Weight As Double
+Dim SearchDV As String, PriceRow As Integer
+Dim HistData As Variant, MaxRet As Integer, MinVar As Integer, StockInt As Integer
+Dim DVremain As Double, ERloc As Integer, Varloc As Integer, BetaArray As Variant
+Dim Bloc As Integer, ERArray As Variant
+Dim Trow As Integer, MaxER As Double, MaxERloc As Integer, Priceloc As Integer, Weightloc As Integer
+Dim RRVArray As Variant, MaxERArray As Variant, MinVarArray As Variant
+Dim DVBoolean As Boolean, AllSheetArray As Variant
+Dim ACrow As Integer, ArrayCorrection As Variant, PDSheet As Worksheet
+Dim PDArray As Variant, PDrow As Integer, MoveOver As Integer, Acol As Integer, Arow As Integer
+Dim SymCount As Integer
+
+Set AllSheet = Sheets("Allocation")
+Set PDSheet = Sheets("Price Data")
+
+PDArray = PDSheet.UsedRange
+
+AllSheet.Select
+AllSheetArray = AllSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+If IsEmpty(AllSheetArray) = False Then AllSheetArray = Cells(Tablebegin, UBound(AllSheetArray, 2) + 2).CurrentRegion
+
+AllSheet.UsedRange.Delete
+
+'***************************
+'Finds column locations of values based on the headings
+SearchDV = "Investment"
+SearchSym = "Symbol"
+'****************************
+SLSheet.Select
+
+SLArray = SLSheet.UsedRange 'array of stock list sheet
+Tlist = SLSheet.Cells(Tablebegin, ColBegin).CurrentRegion 'array of table containing all stocks _
+and their relevent data
+HistData = SDSheet.UsedRange 'array of historical data of the index and stocks
+
+DV = 0 'Dollar value of desired investment
+'****************************************
+'find locations of headings and their relative location to each other
+Weightloc = ColBegin + 1
+Priceloc = Weightloc + 1
+ERloc = Priceloc + 1
+Bloc = ERloc + 1
+MaxRet = Bloc + 1
+MinVar = MaxRet + 1
+PriceRow = 3
+'*****************************************
+'search through SLArray until the dollar value is found (allows user to move it where ever desired)
+For SLrow = LBound(SLArray) To UBound(SLArray, 1)
+    For SLcol = LBound(SLArray) To UBound(SLArray, 2)
+        If SLArray(SLrow, SLcol) = SearchDV Then
+            DV = SLArray(SLrow, SLcol + 1)
+            Exit For
+        End If
+    Next SLcol
+    If DV <> 0 Then Exit For
+Next SLrow
+
+'finds where there are no weights for stocks(not included in the market portfolio)
+For Trow = LBound(Tlist) To UBound(Tlist, 1)
+    If IsEmpty(Tlist(Trow, UBound(Tlist, 2))) = True Then
+        Stockloc = Trow
+        Exit For
+    End If
+Next Trow
+
+'Creates various arrays from the stocks included in the market portfolio
+For Tcol = LBound(Tlist) To UBound(Tlist, 2)
+    If Tlist(LBound(Tlist), Tcol) = SearchSym Then
+        'collects all the stock symbols
+        StockArray = Range(Cells(Tablebegin, Tcol), Cells(Stockloc + Tablebegin - 2, Tcol))
+    ElseIf Tlist(LBound(Tlist), Tcol) = SearchWeight Then
+        'collects the value of their weighting
+        WeightArray = Range(Cells(Tablebegin, Tcol), Cells(Stockloc + Tablebegin - 2, Tcol))
+    ElseIf Tlist(LBound(Tlist), Tcol) = SearchBeta Then
+        'collects beta values
+        BetaArray = Range(Cells(Tablebegin, Tcol), Cells(Stockloc + Tablebegin - 2, Tcol))
+    ElseIf Tlist(LBound(Tlist), Tcol) = SearchER Then
+        'collects expected returns
+        ERArray = Range(Cells(Tablebegin, Tcol), Cells(Stockloc + Tablebegin - 2, Tcol))
+    ElseIf Tlist(LBound(Tlist), Tcol) = SearchRRV Then
+        'collects Residual Return Array
+        RRVArray = Range(Cells(Tablebegin, Tcol), Cells(Stockloc + Tablebegin - 2, Tcol))
+    End If
+Next Tcol
+
+'Create an array that will be used to capture the price of each stock from looping through _
+the historical data array
+ReDim PriceArray(LBound(WeightArray) To UBound(WeightArray, 1), LBound(WeightArray) To UBound(WeightArray, 2))
+
+For Srow = LBound(StockArray) + 1 To UBound(StockArray, 1)
+    For PDrow = LBound(PDArray) To UBound(PDArray, 1)
+        If PDArray(PDrow, 1) = StockArray(Srow, 1) Then
+            PriceArray(Srow, 1) = PDArray(PDrow, 2)
+            Exit For
+        End If
+    Next PDrow
+Next Srow
+
+'Create heading for Price array, and then place all the arrays into the Allocation Worksheet
+PriceArray(LBound(PriceArray), LBound(PriceArray)) = "Price"
+AllSheet.Cells(Tablebegin, ColBegin).Resize(UBound(StockArray), UBound(StockArray, 2)).Value = StockArray
+AllSheet.Cells(Tablebegin, Weightloc).Resize(UBound(WeightArray), UBound(WeightArray, 2)).Value = WeightArray
+AllSheet.Cells(Tablebegin, Priceloc).Resize(UBound(PriceArray), UBound(PriceArray, 2)).Value = PriceArray
+AllSheet.Cells(Tablebegin, Bloc).Resize(UBound(BetaArray), UBound(BetaArray, 2)).Value = BetaArray
+AllSheet.Cells(Tablebegin, ERloc).Resize(UBound(ERArray), UBound(ERArray, 2)).Value = ERArray
+
+AllSheet.Cells(1, 1).Value = SearchDV
+AllSheet.Cells(1, 2).Value = DV
+
+'Tlist becomes an array of the combination of arrays just placed into the worksheet
+Tlist = AllSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+
+'Place new headings
+AllSheet.Cells(Tablebegin, ERloc).Value = "Expected Return"
+AllSheet.Cells(Tablebegin, MaxRet).Value = "Max Ret Allocation"
+AllSheet.Cells(Tablebegin, MinVar).Value = "Min Var Allocation"
+
+Tlist = AllSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+
+DVremain = DV
+MaxER = 0
+
+'Calculate the minimum # of each stock put into market portfolio, and then calculates the remaining dollar value
+For Trow = LBound(Tlist) + 1 To UBound(Tlist, 1)
+    'round down the portfolio allocation to the nearest whole number
+    '% allocation times total investment amount divided by stock price
+    StockInt = WorksheetFunction.RoundDown(Tlist(Trow, ColBegin + 1) * DV / Tlist(Trow, ColBegin + 2), 0)
+    Tlist(Trow, MaxRet) = StockInt 'places integer value in both columns, as a starting point for each
+    Tlist(Trow, MinVar) = StockInt
+    DVremain = DVremain - StockInt * Tlist(Trow, ColBegin + 2) 'calculate dollars remaining
+Next Trow
+
+'This portion calculates how much to invest in the stock with the highest expected return, given that the price _
+of the stock is lower than the remaining dollar amount that needs to be invested
+DVBoolean = True
+Do Until DVBoolean = False
+    DVBoolean = False 'start off as false, and if something is added to the portfolio, then it becomes true
+    For Trow = LBound(Tlist) + 1 To UBound(Tlist, 1)
+        If Tlist(Trow, Priceloc) < DVremain And Tlist(Trow, ERloc) >= MaxER Then 'if the price of the stock is less than the _
+        dollars remaining to be allocated, and the expected return is higher for the stock
+            MaxER = Tlist(Trow, ERloc) 'record new expected return
+            MaxERloc = Trow 'record location of the stock to be added
+            DVBoolean = True 'ensure loop continues
+        End If
+    Next Trow
+    If DVBoolean = True Then 'when the highest expected return stock is found
+        'amount of stock to add is calculated by rounding down from the remaining dollar amount divided by the stock price
+        Tlist(MaxERloc, MaxRet) = Tlist(MaxERloc, MaxRet) + WorksheetFunction.RoundDown(DVremain / Tlist(MaxERloc, Priceloc), 0)
+        'the remaining dollars left to be allocated needs to be recalculated
+        DVremain = DVremain - WorksheetFunction.RoundDown(DVremain / Tlist(MaxERloc, Priceloc), 0) * PriceArray(MaxERloc, 1)
+    End If
+    MaxER = 0 ' reset MaxER so that more stocks can be added
+Loop
+
+AllSheet.Select
+AllSheet.Cells(Tablebegin, ColBegin).Resize(UBound(Tlist), UBound(Tlist, 2)).Value = Tlist 'replace array back onto worksheet _
+with new integer values for portfolio allocation
+
+MaxERArray = Range(Cells(Tablebegin, MaxRet), Cells(UBound(Tlist, 1) + Tablebegin - 1, MaxRet)) ' array containing integer values _
+for weighting of the allocation looking to maximize ER
+MinVarArray = Range(Cells(Tablebegin, MinVar), Cells(UBound(Tlist, 1) + Tablebegin - 1, MinVar)) ' array containing integer values _
+for weighting of the allocation looking to minimize variance
+
+AllSheet.Columns.AutoFit
+'this procedure calculates variances of the 2 different portfolio allocations and calculates the minimun variance _
+portfolio weights
+Call Var_CoVar(StockArray, BetaArray, RRVArray, PriceArray, MaxERArray, MinVarArray, DV, MaxRet, MinVar, ERArray)
+
+ArrayCorrection = AllSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+
+For ACrow = LBound(ArrayCorrection) To UBound(ArrayCorrection, 1)
+    If IsEmpty(ArrayCorrection(ACrow, ColBegin)) = True Then
+        Exit For
+    ElseIf ArrayCorrection(ACrow, MaxRet) = 0 And ArrayCorrection(ACrow, MinVar) = 0 Then
+        Range(Cells(Tablebegin + ACrow - 1, ColBegin), Cells(Tablebegin + ACrow - 1, UBound(ArrayCorrection, 2))).Delete
+        ArrayCorrection = Cells(Tablebegin, ColBegin).CurrentRegion
+        ACrow = ACrow - 1
+    End If
+Next ACrow
+
+MoveOver = 6
+With AllSheet
+    .Select
+    If IsEmpty(AllSheetArray) = False Then
+        Cells(Tablebegin, MinVar + 2).Resize(UBound(AllSheetArray), UBound(AllSheetArray, 2)).Value = AllSheetArray
+        
+        Range(Cells(UBound(AllSheetArray, 1) + Tablebegin - 3, MaxRet - 1 + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        Range(Cells(Tablebegin, MaxRet + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MaxRet + MoveOver)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        Range(Cells(Tablebegin, MinVar + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        Range(Cells(Tablebegin + 1, MaxRet + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    End If
+    .Columns.AutoFit
+    .UsedRange.HorizontalAlignment = xlCenter
+    ArrayCorrection = AllSheet.UsedRange
+    For Arow = LBound(ArrayCorrection) To UBound(ArrayCorrection, 1)
+        For Acol = LBound(ArrayCorrection) To UBound(ArrayCorrection, 2)
+            If ArrayCorrection(Arow, Acol) = SearchSym Then
+                Cells(Arow, Acol).EntireColumn.HorizontalAlignment = xlLeft
+                SymCount = SymCount + 1
+            End If
+            If SymCount = 2 Then Exit For
+        Next Acol
+        If SymCount = 2 Then Exit For
+    Next Arow
+
+End With
+
+End Sub
+
+Sub Var_CoVar(StockArray, BetaArray, RRVArray, PriceArray, MaxERArray, MinVarArray, DV, MaxRet, MinVar, ERArray)
+
+Dim PVSheet As Worksheet, SDSheet As Worksheet, SLSheet As Worksheet
+Dim IndexVar As Double, Hcol As Integer, SDArray As Variant, Clist As Variant
+Dim PVArray As Variant, MatrixBegin As Integer, PVrow As Integer, PVcol As Integer
+Dim DollarArray As Variant, TotalDV As Double, Drow As Integer, CoVarArray As Variant
+Dim AllArray1 As Variant, AllArray2 As Variant, AllArray3 As Variant, MVBoolean As Boolean
+Dim DollarArrayMV As Variant, MinVarRow As Integer, MinVarValue As Double, MinVarArray2 As Variant
+Dim ControlVar As Double, ControlLoop As Boolean, AllSheetArray As Variant
+Dim AllSheet As Worksheet, Arow As Integer
+
+MatrixBegin = 1 ' starting location for where the variance-covariance matrix will be located
+
+ReDim DollarArray(LBound(PriceArray) To UBound(PriceArray, 1) - 1, LBound(PriceArray) To UBound(PriceArray, 2)) 'used to _
+calculate the dollars consumed by each security and then be converted into percent weight in portfolio
+
+'define various worksheets as objects
+Set SDSheet = Sheets("Stock Data")
+Set PVSheet = Sheets("Portfolio Variance")
+Set SLSheet = Sheets("Stock List")
+Set AllSheet = Sheets("Allocation")
+
+PVSheet.UsedRange.Delete 'delete current variance-covariance matrix on worksheet
+
+SDArray = SDSheet.UsedRange 'array of worksheet containing all the stock and index data
+'array of index used (temporary)
+Clist = SLSheet.Cells(1, IndexBegin).CurrentRegion
+ReDim Clist(1 To UBound(Clist, 1), 1 To 1)
+Clist(1, 1) = SLSheet.Cells(1, IndexBegin + 1).Value
+
+'finds index variance in stock data array
+For Hcol = UBound(SDArray, 2) To LBound(SDArray, 2) Step -1
+    If SDArray(1, Hcol) = Clist(1, 1) Then
+        IndexVar = SDSheet.Cells(1, Hcol + 2) 'Variance
+        Exit For
+    End If
+Next Hcol
+
+PVSheet.Select
+
+'place the array of stock symbols so that they form a two dimensional box
+PVSheet.Cells(MatrixBegin, MatrixBegin).Resize(UBound(StockArray), UBound(StockArray, 2)).Value = StockArray
+PVSheet.Cells(MatrixBegin, MatrixBegin).Resize(UBound(StockArray, 2), UBound(StockArray)).Value = WorksheetFunction.Transpose(StockArray)
+
+'create and array of the box so that the values can be filled in
+PVArray = PVSheet.Cells(MatrixBegin, MatrixBegin).CurrentRegion
+
+'using the estimates of beta, expected return, residual return variance, and index variance, the _
+variances and covariances can be calculated
+For PVrow = LBound(PVArray) + 1 To UBound(PVArray, 1)
+    For PVcol = LBound(PVArray) + 1 To UBound(PVArray, 2)
+        If PVrow = PVcol Then
+            PVArray(PVrow, PVcol) = IndexVar * BetaArray(PVrow, 1) ^ 2 + RRVArray(PVrow, 1)
+        Else
+            PVArray(PVrow, PVcol) = BetaArray(PVrow, 1) * BetaArray(PVcol, 1) * IndexVar
+        End If
+    Next PVcol
+Next PVrow
+
+'replace variance-covariance array back on worksheet
+PVSheet.Cells(MatrixBegin, MatrixBegin).Resize(UBound(PVArray, 2), UBound(PVArray)).Value = PVArray
+
+PVArray = PVSheet.UsedRange
+'contains only the number values of variance-covariance matrix (to be used in matrix calculations)
+CoVarArray = Range(Cells(MatrixBegin + 1, MatrixBegin + 1), Cells(UBound(PVArray, 1), UBound(PVArray, 2)))
+'************************************************************************************
+'For finding the variance in the portfolio allocation maximizing expected return
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    'dollar amount of each stock invested is put into dollararray
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = PriceArray(Drow + 1, 1) * MaxERArray(Drow + 1, 1)
+    End If
+Next Drow
+
+TotalDV = WorksheetFunction.Sum(DollarArray) 'sum of dollars used in portfolio so far
+
+'% composition of each stock in portfolio
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    DollarArray(Drow, 1) = DollarArray(Drow, 1) / TotalDV
+Next Drow
+'create array with same contents as dollararray
+ReDim AllArray1(LBound(DollarArray) To UBound(DollarArray, 2), LBound(DollarArray) To UBound(DollarArray, 1))
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    AllArray1(1, Drow) = DollarArray(Drow, 1)
+Next Drow
+
+'matrix multiplication to determine portoflio variance
+AllArray2 = Application.MMult(AllArray1, CoVarArray)
+AllArray3 = Application.MMult(AllArray2, DollarArray)
+
+AllSheetArray = AllSheet.UsedRange
+AllSheet.Select
+For Arow = Tablebegin To UBound(AllSheetArray, 1)
+    If IsEmpty(AllSheetArray(Arow, 1)) = True Then Exit For
+Next Arow
+AllSheet.Cells.Delete
+AllSheet.Cells(1, ColBegin).Resize(Arow - 1, UBound(AllSheetArray, 2)).Value = AllSheetArray
+AllSheetArray = AllSheet.UsedRange
+
+'repopulate the dollar array with the value of each stock that makes up the portfolio
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = PriceArray(Drow + 1, 1) * MaxERArray(Drow + 1, 1)
+    End If
+Next Drow
+
+TotalDV = WorksheetFunction.Sum(DollarArray) 'total dollar value of portfolio
+
+'Calculates weight times the expected return for each stock to calculate the expected reutrn of the portfolio
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = DollarArray(Drow, 1) / TotalDV * ERArray(Drow + 1, 1)
+    End If
+Next Drow
+
+AllSheet.Cells(UBound(AllSheetArray, 1) + 2, MaxRet).Value = AllArray3 'variance
+AllSheet.Cells(UBound(AllSheetArray, 1) + 1, MaxRet).Value = TotalDV 'total dollar value of portfolio
+AllSheet.Cells(UBound(AllSheetArray, 1) + 3, MaxRet).Value = Application.Sum(DollarArray) 'expected return of portfolio
+'************************************************************************************
+'For finding the minimum variance portfolio from what is left of the investment budget
+
+'calculate the total dollar value of portfolio currently
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = PriceArray(Drow + 1, 1) * MinVarArray(Drow + 1, 1)
+    End If
+Next Drow
+
+TotalDV = WorksheetFunction.Sum(DollarArray) ' total dollar value
+
+MVBoolean = False 'default
+Do Until MVBoolean = True
+    ControlLoop = False 'for the 1st stock to enter the following loop, want to exhaust budget so always _
+    need to add a stock
+    'loop through each stock in minvararray
+    For MinVarRow = LBound(MinVarArray) + 1 To UBound(MinVarArray, 1)
+        'if the price of the stock is less than the dollars remaining in the portfolio
+        If (PriceArray(MinVarRow, 1) + TotalDV) <= DV Then
+
+            'variance cant possibly be this high, so a stock will always be added to the portfolio if _
+            the dollar budget allows it
+            If ControlLoop = False Then
+                MinVarValue = 1000
+            End If
+            
+            ControlLoop = True
+            
+            MinVarArray(MinVarRow, 1) = MinVarArray(MinVarRow, 1) + 1 'a unit of the current stock is added to the portfolio
+            
+            'finds new dollar value of all the stocks in the portfolio
+            For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+                If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+                    DollarArray(Drow, 1) = PriceArray(Drow + 1, 1) * MinVarArray(Drow + 1, 1)
+                End If
+            Next Drow
+            
+            TotalDV = WorksheetFunction.Sum(DollarArray) 'total dollar value of portfolio
+            
+            'weights of each stock in the portfolio
+            For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+                DollarArray(Drow, 1) = DollarArray(Drow, 1) / TotalDV
+            Next Drow
+            
+            'recreate dollar array for matrix multiplication purposes
+            ReDim AllArray1(LBound(DollarArray) To UBound(DollarArray, 2), LBound(DollarArray) To UBound(DollarArray, 1))
+            For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+                AllArray1(1, Drow) = DollarArray(Drow, 1)
+            Next Drow
+            
+            'calulcates the variance of the portofolio with added stock
+            AllArray2 = Application.MMult(AllArray1, CoVarArray)
+            AllArray3 = Application.MMult(AllArray2, DollarArray)
+            'subtract 1 from the integer weighting component of the current stock
+            MinVarArray(MinVarRow, 1) = MinVarArray(MinVarRow, 1) - 1
+            
+            'if the variance is lower than the previous lowest variance
+            If AllArray3(LBound(AllArray3)) <= MinVarValue Then
+                MinVarValue = AllArray3(LBound(AllArray3)) 'new minimum variance value
+                MinVarArray2 = MinVarArray 'new array created to hold the current integer _
+                weighting if each stock
+                MinVarArray2(MinVarRow, 1) = MinVarArray2(MinVarRow, 1) + 1 'adds 1 back to the stock _
+                with new lowest minimum variance
+            End If
+ 
+        End If
+    Next MinVarRow
+    
+    MinVarArray = MinVarArray2 'when the addition of 1 more stock is completed _
+    the lowest minimum variance stock is chosen, and the process is repeated
+    If ControlLoop = False Then MVBoolean = True 'process not repeated if the controlloop _
+    variable is not triggered
+Loop
+
+'the minvararray is placed on the worksheet, which contains the integer values of allocation for each stock
+AllSheet.Cells(Tablebegin, MinVar).Resize(UBound(MinVarArray, 1), UBound(MinVarArray, 2)).Value = MinVarArray
+
+'dollar value of each stock is calculated
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = PriceArray(Drow + 1, 1) * MinVarArray(Drow + 1, 1)
+    End If
+Next Drow
+
+TotalDV = WorksheetFunction.Sum(DollarArray) ' total dollar value of portfolio
+
+'expected return of portfolio calculated
+For Drow = LBound(DollarArray) To UBound(DollarArray, 1)
+    If IsNumeric(PriceArray(Drow + 1, 1)) = True Then
+        DollarArray(Drow, 1) = DollarArray(Drow, 1) / TotalDV * ERArray(Drow + 1, 1)
+    End If
+Next Drow
+
+AllSheet.Cells(UBound(AllSheetArray, 1) + 2, MinVar).Value = MinVarValue 'variance
+AllSheet.Cells(UBound(AllSheetArray, 1) + 1, MinVar).Value = TotalDV 'total dollar value
+AllSheet.Cells(UBound(AllSheetArray, 1) + 3, MinVar).Value = Application.Sum(DollarArray) ' expected return
+AllSheet.Cells(UBound(AllSheetArray, 1) + 2, MaxRet - 1).Value = "Variance" 'variance
+AllSheet.Cells(UBound(AllSheetArray, 1) + 1, MaxRet - 1).Value = "Total Dollar Value" 'total dollar value
+AllSheet.Cells(UBound(AllSheetArray, 1) + 3, MaxRet - 1).Value = "Expected Return" ' expected return
+
+With AllSheet
+    .Select
+    Range(Cells(UBound(AllSheetArray, 1) + 1, MaxRet - 1), Cells(UBound(AllSheetArray, 1) + 3, MinVar)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    Range(Cells(Tablebegin, MaxRet), Cells(UBound(AllSheetArray, 1) + 3, MaxRet)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    Range(Cells(Tablebegin, MinVar), Cells(UBound(AllSheetArray, 1), MinVar)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    Range(Cells(Tablebegin + 1, MaxRet), Cells(UBound(AllSheetArray, 1), MinVar)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    .Columns.AutoFit
+End With
+AllSheet.Select
+
+End Sub
+
+Sub AllocationPeriod()
+Dim SDSheet As Worksheet
+Dim HistData As Variant
+Dim html As Variant
+Dim ScrollDown As Integer, Trow As Integer
+Dim Div As Integer, Stock As String
+Dim Row As Integer, Col As Integer
+Dim Tlist As Variant, SLSheet As Worksheet
+Dim TData As Variant, TlistI As Variant, Tcol As Integer
+Dim BSLrow As Integer, GSLrow As Integer, Inclusion As Integer
+Dim APIkey As Variant, STable As Worksheet, Class As Integer
+Dim Clist As Variant, Crow As Integer, CorT As Boolean, AllPer As Integer
+Dim UpperDate As String, LowerDate As String, LDArray As Variant, DateArray As Variant
+Dim PrevDate As Integer, SkipDate As Boolean, CutoffDate As String, SDArray As Variant
+Dim SDrow As Integer
+'reference point for locations on worksheet
+'Set names for worksheets
+Set SDSheet = Sheets("Stock Data")
+Set SLSheet = Sheets("Stock List")
+
+'arbitrary starting position
+Row = 1
+Col = 1
+
+'Array of Stock Data sheet
+SDSheet.Select
+SDArray = SDSheet.UsedRange
+
+'period of how far back to look (in months)
+AllPer = SLSheet.Cells(4, 2)
+
+UpperDate = SDArray(Row + 2, Col) 'most recent date of stock data
+LDArray = Split(UpperDate, "-") 'split date to determine year/month/day
+SkipDate = False
+LowerDate = CInt(LDArray(LBound(LDArray) + 1)) - AllPer 'changes month component to refelct how far back to _
+look
+
+If LowerDate < 1 Then 'if the month is less than 1 (cant have a 0 or -ve number for any date component) _
+then the year is moved back 1 and the add the negative component to 12 to represent the previous year
+    LowerDate = 12 + LowerDate
+    LDArray(LBound(LDArray)) = CInt(LDArray(LBound(LDArray))) - 1 'year is hte first component, have to subtract _
+    it by 1
+    LDArray(LBound(LDArray) + 1) = LowerDate 'month is the middle compnent
+End If
+
+'Go through each row in the stock data array in the first column (contains dates)
+For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 2)
+    ' the date is split apart to analyze the components
+    DateArray = Split(SDArray(SDrow, 1), "-")
+    If CInt(DateArray(LBound(DateArray) + 1)) = LowerDate Then 'if the month in the date is exactly what matches the _
+    amount of months to look in the past, then the day component can now be analyzed and the cutoff date for stock _
+    data can be found
+        If CInt(DateArray(UBound(DateArray))) = CInt(LDArray(UBound(LDArray))) Then 'the exact day, in LowerDate
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) < CInt(LDArray(UBound(LDArray))) Then 'if the date in the month is now below the actual _
+        day (ex. could corrospond ot a weekend so there is no date for exact amount of months back)
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) < CInt(LDArray(UBound(LDArray) - 1)) Then
+            'if the next available date could be in the previous month, which would occur if the previous 2 conditions _
+            are passed on, so the date would be higher, and month lower than the exact date, months back
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) > CInt(LDArray(UBound(LDArray) - 1)) And CInt(LDArray(UBound(LDArray) - 1)) = 1 Then
+            'in case the month back goes into the previous year, then the year, month and day all need to change where _
+            year is less, and month and day are both higher
+            CutoffDate = SDArray(SDrow + 1, 1)
+
+            Exit For
+        End If
+    End If
+Next SDrow
+SLSheet.Select
+SLSheet.Cells(5, 2).Value = SDrow - 2
+
+End Sub
+
+Sub WorksheetMaintain()
+Dim SLSheet As Worksheet, Tlist As Variant
+Dim Trow As Integer, Tcol As Integer
+Dim SearchAR As String
+
+Set SLSheet = Sheets("Stock List")
+Tlist = SLSheet.UsedRange
+SLSheet.Select
+SearchAR = "Actual Return"
+
+Range(Cells(Tablebegin, ColBegin), Cells(UBound(Tlist, 1), UBound(Tlist, 2))).ClearFormats
+Range(Cells(Tablebegin, ColBegin), Cells(UBound(Tlist, 1), UBound(Tlist, 2))).HorizontalAlignment = xlCenter
+
+For Trow = Tablebegin To UBound(Tlist, 1)
+    If Trow Mod 2 = 1 And IsEmpty(Tlist(Trow, UBound(Tlist, 2))) = False Then
+        Range(Cells(Trow, ColBegin), Cells(Trow, UBound(Tlist, 2))).Interior.Color = RGB(190, 220, 255)
+    ElseIf Trow Mod 2 = 0 And IsEmpty(Tlist(Trow, UBound(Tlist, 2))) = False Then
+        Range(Cells(Trow, ColBegin), Cells(Trow, UBound(Tlist, 2))).Interior.Color = RGB(255, 255, 255)
+    End If
+    
+    If IsEmpty(Tlist(Trow, UBound(Tlist, 2))) = True Then
+        'Title Row
+        Range(Cells(Tablebegin, ColBegin), Cells(Tablebegin, UBound(Tlist, 2))).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        'Title row to the end of Phi and weight columns
+        Range(Cells(Tablebegin, ColBegin), Cells(Trow - 1, UBound(Tlist, 2))).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        'Phi and weight columns
+        Range(Cells(Tablebegin, UBound(Tlist, 2) - 1), Cells(Trow - 1, UBound(Tlist, 2))).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        For Tcol = LBound(Tlist) To UBound(Tlist, 2)
+            If Tlist(Tablebegin, Tcol) = SearchAR Then
+                Range(Cells(Tablebegin, ColBegin), Cells(Trow - 1, Tcol)).BorderAround _
+                ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+                Exit For
+            End If
+        Next Tcol
+        
+        Exit For
+    End If
+Next Trow
+
+End Sub

@@ -1,0 +1,125 @@
+Option Explicit
+
+Const Tablebegin = 7
+'When changing the where the table begins, make sure to add a space manually _
+between the table and the data above it so it begins at row = 5
+Const ColBegin = 1
+Const SDRowBegin = 3
+Const IndexBegin = 4
+
+Sub GetPriceData()
+Dim InvArray As Variant, AllSheet As Worksheet, Price As Double
+Dim PortArray As Variant, Irow As Integer, CPloc As Integer
+Dim MaxRet As Integer, MinVar As Integer, InvPloc As Integer
+Dim MaxRetArray As Variant, MinVarArray As Variant, PriceArray As Variant, PrevPriceArray As Variant
+Dim SearchCRD As String, SearchRD As String, SearchDVR As String, APIkey As String
+Dim Icol As Integer, Stock As String, SLSheet As Worksheet, Prow As Integer
+Dim CurrentMaxRet As Double, CurrentMinVar As Double, PrevMinVar As Double, PrevMaxRet As Double
+
+Application.ScreenUpdating = False
+Application.Calculation = xlManual
+
+Set SLSheet = Sheets("Stock List")
+Set AllSheet = Sheets("Allocation")
+
+APIkey = SLSheet.Cells(1, 2)
+
+SearchCRD = "Current Return (Daily)"
+SearchRD = "Return to Date"
+SearchDVR = "Dollar Value Return"
+
+InvPloc = 2
+CPloc = InvPloc + 1
+MaxRet = CPloc + 1
+MinVar = MaxRet + 1
+
+PortArray = AllSheet.Cells(Tablebegin, 1).CurrentRegion
+InvArray = AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).CurrentRegion
+
+For Irow = LBound(InvArray) + 1 To UBound(InvArray, 1)
+    If IsEmpty(InvArray(Irow, 1)) = False Then
+        Stock = InvArray(Irow, 1)
+        Call Download_Csv(Price, Stock, APIkey)
+        InvArray(Irow, CPloc) = Price
+    Else
+        Exit For
+    End If
+Next Irow
+
+AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).Resize(UBound(InvArray), UBound(InvArray, 2)).Value = InvArray
+InvArray = AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).CurrentRegion
+
+PrevPriceArray = Range(Cells(Tablebegin + 1, InvPloc + UBound(PortArray, 2) + 1), Cells(Irow, InvPloc + UBound(PortArray, 2) + 1))
+PriceArray = Range(Cells(Tablebegin + 1, CPloc + UBound(PortArray, 2) + 1), Cells(Irow, CPloc + UBound(PortArray, 2) + 1))
+MaxRetArray = Range(Cells(Tablebegin + 1, MaxRet + UBound(PortArray, 2) + 1), Cells(Irow, MaxRet + UBound(PortArray, 2) + 1))
+MinVarArray = Range(Cells(Tablebegin + 1, MinVar + UBound(PortArray, 2) + 1), Cells(Irow, MinVar + UBound(PortArray, 2) + 1))
+
+For Prow = LBound(PriceArray) To UBound(PriceArray, 1)
+    CurrentMaxRet = CurrentMaxRet + PriceArray(Prow, 1) * MaxRetArray(Prow, 1)
+    CurrentMinVar = CurrentMinVar + PriceArray(Prow, 1) * MinVarArray(Prow, 1)
+    PrevMaxRet = PrevMaxRet + PrevPriceArray(Prow, 1) * MaxRetArray(Prow, 1)
+    PrevMinVar = PrevMinVar + PrevPriceArray(Prow, 1) * MinVarArray(Prow, 1)
+Next Prow
+
+For Irow = LBound(InvArray) To UBound(InvArray, 1)
+    For Icol = LBound(InvArray) To UBound(InvArray, 2)
+        If InvArray(Irow, Icol) = SearchCRD Then
+            
+        ElseIf InvArray(Irow, Icol) = SearchRD Then
+            InvArray(Irow, MaxRet) = CurrentMaxRet / PrevMaxRet - 1
+            InvArray(Irow, MinVar) = CurrentMinVar / PrevMinVar - 1
+        ElseIf InvArray(Irow, Icol) = SearchDVR Then
+            InvArray(Irow, MaxRet) = CurrentMaxRet - PrevMaxRet
+            InvArray(Irow, MinVar) = CurrentMinVar - PrevMinVar
+        End If
+    Next Icol
+Next Irow
+AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).Resize(UBound(InvArray), UBound(InvArray, 2)).Value = InvArray
+AllSheet.Columns.AutoFit
+Application.ScreenUpdating = True
+Application.Calculation = xlAutomatic
+End Sub
+
+
+Sub Download_Csv(Price, Stock, APIkey)
+Dim TData As Variant, Dcol As Integer, Drow As Integer
+Dim TDC As Workbook, SDArray As Variant
+Dim sCSVLink As String, RPeriod As Double
+Dim ieApp As Object, Main As String, Row As Integer
+
+Row = 1
+
+Main = ActiveWorkbook.Name
+'the link needed to find the pricing data
+sCSVLink = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=" & Stock & "&apikey=" & APIkey & "&datatype=csv"
+
+Set TDC = ActiveWorkbook 'define the active workbook to refer to later
+
+Workbooks.Open Filename:=sCSVLink 'open the link through internet explorer
+Application.Wait (Now + TimeValue("00:00:05")) 'temporary solution to ensure the stock data is fully downloaded
+Do Until ActiveWorkbook.Name <> Main
+    DoEvents
+Loop
+TData = ActiveSheet.UsedRange 'the csv is put into an array
+'will have greater than 3 columns if stock data exists
+Do Until UBound(TData, 1) >= 3
+    DoEvents
+    TData = ActiveSheet.UsedRange
+Loop
+
+'TData = ActiveSheet.UsedRange 'put the data from the csv file in an array
+ActiveWorkbook.Close 'close the workbook containing the data
+TDC.Activate 'Make the main workbook active
+
+For Dcol = UBound(TData, 2) To LBound(TData, 2) Step -1
+    If TData(Row, Dcol) = "close" Then
+        Price = TData(Row + 1, Dcol)
+        Exit For
+    End If
+Next Dcol
+
+Application.DisplayAlerts = False
+Application.DisplayAlerts = True
+
+End Sub
+

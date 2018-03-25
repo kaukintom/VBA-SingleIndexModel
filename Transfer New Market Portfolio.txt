@@ -1,0 +1,66 @@
+Option Explicit
+
+Const Tablebegin = 7
+'When changing the where the table begins, make sure to add a space manually _
+between the table and the data above it so it begins at row = 5
+Const ColBegin = 1
+Const SDRowBegin = 3
+Const IndexBegin = 4
+
+Sub Transfer_Table()
+Dim AllSheet As Worksheet, AllSheetArray As Variant
+Dim SymArray As Variant, PriceArray As Variant, MaxRetArray As Variant, MinVarArray As Variant
+Dim SearchSym As String, SearchMaxRet As String, SearchMinVar As String
+Dim Allcol As Integer, Allrow As Integer, UpDateArray As Variant
+Dim SearchCRD As String, SearchRD As String, SearchDVR As String, SearchPrice As String
+Dim InvInfo As Variant
+
+Set AllSheet = Sheets("Allocation")
+AllSheet.Select
+
+SearchCRD = "Current Return (Daily)"
+SearchRD = "Return to Date"
+SearchDVR = "Dollar Value Return"
+SearchSym = "Symbol"
+SearchPrice = "Price"
+SearchMaxRet = "Max Ret Allocation"
+SearchMinVar = "Min Var Allocation"
+
+AllSheetArray = AllSheet.Cells(Tablebegin, 1).CurrentRegion
+InvInfo = AllSheet.Cells(1, 1).CurrentRegion
+
+For Allrow = LBound(AllSheetArray) To UBound(AllSheetArray, 1)
+    If IsEmpty(AllSheetArray(Allrow + 1, 1)) = True Then
+        Exit For
+    End If
+Next Allrow
+
+For Allcol = LBound(AllSheetArray) To UBound(AllSheetArray, 2)
+    If AllSheetArray(1, Allcol) = SearchSym Then
+        SymArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
+    ElseIf AllSheetArray(1, Allcol) = SearchPrice Then
+        PriceArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
+    ElseIf AllSheetArray(1, Allcol) = SearchMaxRet Then
+        MaxRetArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
+    ElseIf AllSheetArray(1, Allcol) = SearchMinVar Then
+        MinVarArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
+    End If
+Next Allcol
+
+AllSheet.UsedRange.Delete
+
+AllSheet.Cells(Tablebegin, 1).Resize(UBound(AllSheetArray), UBound(AllSheetArray, 2)).Value = AllSheetArray
+AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 2).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = SymArray
+AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 3).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = PriceArray
+AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 4).Value = "Current Price"
+AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 5).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = MaxRetArray
+AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 6).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = MinVarArray
+
+UpDateArray = AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 2).CurrentRegion
+
+AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin, UBound(AllSheetArray, 2) + 4).Value = SearchCRD
+AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin + 1, UBound(AllSheetArray, 2) + 4).Value = SearchRD
+AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin + 2, UBound(AllSheetArray, 2) + 4).Value = SearchDVR
+AllSheet.Cells(1, 1).Resize(UBound(InvInfo), UBound(InvInfo, 2)).Value = InvInfo
+
+End Sub
