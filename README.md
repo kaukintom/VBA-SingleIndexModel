@@ -22,13 +22,16 @@ Sub Procedure: TickerDataCollect
  - Collects stock and index data from Alpha Vantage from API key
  - Drawback: Currently uses a fixed 5 second delay per a security to allow the csv to open and display the data
   - Time consuming
+  
 Module: Portfolio 
 Sub Procedure: OLSRegression
  - Calculates the portfolio weight as a %
  - Determines the integer value of each stock an investor should invest in to minimize variance or maximize return
+
 Module: TransferPriceData
 Sub Procedure: Transfer_Table
  - The allocation table created from OLSRegression can be moved to avoid being deleted if OLSRegression is used again
+
 Module: UpdatePriceDate
 Sub Procedure: GetPriceData
  - Update the table saved from Transfer_Table with the most current price data
