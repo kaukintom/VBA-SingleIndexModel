@@ -37,4 +37,5 @@ Module: UpdatePriceDate<br />
 Sub Procedure: GetPriceData
  - Update the table saved from Transfer_Table with the most current price data
  - Calculates the return to date and dollar value return
- 
+# Acknowledgements
+McMaster University: Commerce 4FF3 - Portfolio Theory and Management
