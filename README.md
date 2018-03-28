@@ -25,8 +25,9 @@ Sub Procedure: TickerDataCollect
   
 Module: Portfolio
 Sub Procedure: OLSRegression
- - Calculates the portfolio weight as a %
+ - Calculates the portfolio composition of stocks and their weight as a %
  - Determines the integer value of each stock an investor should invest in to minimize variance or maximize return
+ - Quick runtime (< 1 second)
 
 Module: TransferPriceData
 Sub Procedure: Transfer_Table
