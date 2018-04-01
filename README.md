@@ -3,7 +3,7 @@ Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite i
 # API key
 Can receive an API key from alphavantage.com or https://www.alphavantage.co/support/#api-key 
 # Data Used
-- Daily Adjusted close return data for all calculations to determine % allocation
+- Daily adjusted close return data for all calculations to determine % allocation
 - Daily close price (not adjusted) used for integer allocation
 - Up to 4 months of return data is used (can choose to use 1 to 4 months in portfolio analysis)
 - Risk free rate (Rf) determined from Bank of Canada T-Bill rates at https://www.bankofcanada.ca/rates/interest-rates/t-bill-yields/
