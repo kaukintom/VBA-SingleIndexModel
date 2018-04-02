@@ -25,7 +25,7 @@ Sub Procedure: TickerDataCollect
   
 Module: Portfolio<br />
 Sub Procedure: OLSRegression
- - Calculates the portfolio composition of stocks and their weight as a %
+ - Calculates the portfolio composition of stocks and their allocation as a %
  - Determines the integer value of each stock an investor should invest in to minimize variance or maximize return
  - Quick runtime (< 1 second)
 
