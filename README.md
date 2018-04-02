@@ -42,7 +42,7 @@ Sub Procedure: GetPriceData
     - Ex. Each stock from S&amp;P/TSX Composite index is put under the symbol column, and the index symbol is put in the index column next to the symbol
     - Also, each stock symbol needs to include the exchange symbol as well (Ex. .TO for Toronto Stock Exchange – GUY.TO)
 2.	Download the stock data through the API key from Alpha Vantage using the TickerDataCollect sub procedure
-    - Currently only downloads 100 daily adjusted close prices for each stock (close to 5 months of data)
+    - Will only download 100 daily adjusted close prices for each stock (approx. 5 months of data)
 3.	Can create the market portfolio (Portfolio where risk-free security is tangent to the efficient frontier) by using the OLSRegression sub procedure
     - Must provide a risk-free rate (obtained from Bank of Canada T-Bills as an annual rate, OLSRegression will turn it into a daily rate) 
     - Must provide an investment amount and time frame (1 to 4 months)
