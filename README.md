@@ -23,7 +23,7 @@ Can receive an API key from alphavantage.com or https://www.alphavantage.co/supp
 - For short selling to not be permitted, securities are ranked by excess returns over beta ((µ<sub>1</sub>-Rf)/(Β<sub>1</sub>))
   - Securities are added until 𝚽 is maximized
 - Security weights in tangent portfolio Z<sub>i</sub>=B<sub>i</sub>/(𝝈<sup>2</sup><sub>ie</sub>)*((µ<sub>i</sub>-Rf)/B<sub>i</sub>-𝚽), where x<sub>i</sub> = z<sub>i</sub>/(∑<sup>n</sup><sub>i=1</sub>z<sub>i</sub>)
-# VBA Macros
+# VBA
 Module: Collect_Stock_Data<br />
 Sub Procedure: TickerDataCollect
  - Collects stock and index data from Alpha Vantage from API key
