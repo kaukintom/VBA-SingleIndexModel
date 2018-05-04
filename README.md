@@ -6,7 +6,7 @@ Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite i
 2. Fixed issues with the dates not aligning among stocks, making the OLS regression unreliable
     - Stocks are not included if portions of the data are missing
     - If a date of data is missing, where the date exists for another stock, the date is added to the stock where it does not exist for, and the stock price associated with that date is its previous close price
-3. The visuals and maintenance of the worksheets "Stock List" and "Stock Data" have been improved
+3. The visual maintenance of the worksheets "Stock List" and "Stock Data" has been improved
 # API key
 Can receive an API key from alphavantage.com or https://www.alphavantage.co/support/#api-key 
 # Data Used
