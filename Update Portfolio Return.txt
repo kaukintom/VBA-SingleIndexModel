@@ -8,6 +8,7 @@ Const SDRowBegin = 3
 Const IndexBegin = 4
 
 Sub GetPriceData()
+'Scrapes price data and then calculates the return of the portfolio
 Dim InvArray As Variant, AllSheet As Worksheet, Price As Double
 Dim PortArray As Variant, Irow As Integer, CPloc As Integer
 Dim MaxRet As Integer, MinVar As Integer, InvPloc As Integer
@@ -24,10 +25,12 @@ Set AllSheet = Sheets("Allocation")
 
 APIkey = SLSheet.Cells(1, 2)
 
+'The headings of the columns and rows necessary to the calculations
 SearchCRD = "Current Return (Daily)"
 SearchRD = "Return to Date"
 SearchDVR = "Dollar Value Return"
 
+'locations of columns relative to each other
 InvPloc = 2
 CPloc = InvPloc + 1
 MaxRet = CPloc + 1
@@ -36,10 +39,12 @@ MinVar = MaxRet + 1
 PortArray = AllSheet.Cells(Tablebegin, 1).CurrentRegion
 InvArray = AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).CurrentRegion
 
-For Irow = LBound(InvArray) + 1 To UBound(InvArray, 1)
-    If IsEmpty(InvArray(Irow, 1)) = False Then
-        Stock = InvArray(Irow, 1)
-        Call Download_Csv(Price, Stock, APIkey)
+'Loops through all the stocks included in portfolio and downloads stock data and finds the latest _
+price of that stock
+For Irow = LBound(InvArray) + 1 To UBound(InvArray, 1) 'Starting at first stock
+    If IsEmpty(InvArray(Irow, 1)) = False Then 'When it reaches a cell that isnt empty
+        Stock = InvArray(Irow, 1) 'Stock
+        Call json_price(APIkey, Stock, Price) 'opens json formatted file
         InvArray(Irow, CPloc) = Price
     Else
         Exit For
@@ -49,77 +54,229 @@ Next Irow
 AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).Resize(UBound(InvArray), UBound(InvArray, 2)).Value = InvArray
 InvArray = AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).CurrentRegion
 
+'Puts the portfolios and new and olds prices into separate arrays for calculations, and finds the arrays based on their _
+relative location to the first table on the page
 PrevPriceArray = Range(Cells(Tablebegin + 1, InvPloc + UBound(PortArray, 2) + 1), Cells(Irow, InvPloc + UBound(PortArray, 2) + 1))
 PriceArray = Range(Cells(Tablebegin + 1, CPloc + UBound(PortArray, 2) + 1), Cells(Irow, CPloc + UBound(PortArray, 2) + 1))
 MaxRetArray = Range(Cells(Tablebegin + 1, MaxRet + UBound(PortArray, 2) + 1), Cells(Irow, MaxRet + UBound(PortArray, 2) + 1))
 MinVarArray = Range(Cells(Tablebegin + 1, MinVar + UBound(PortArray, 2) + 1), Cells(Irow, MinVar + UBound(PortArray, 2) + 1))
 
+'loop through each row of each array, each row is assocaited with a stock, and calculate the returns
 For Prow = LBound(PriceArray) To UBound(PriceArray, 1)
+    'Finds new value of max return portoflio
     CurrentMaxRet = CurrentMaxRet + PriceArray(Prow, 1) * MaxRetArray(Prow, 1)
+    'Finds new value of minimum variance portoflio
     CurrentMinVar = CurrentMinVar + PriceArray(Prow, 1) * MinVarArray(Prow, 1)
+    'Finds initial value of max return portoflio
     PrevMaxRet = PrevMaxRet + PrevPriceArray(Prow, 1) * MaxRetArray(Prow, 1)
+    'Finds initial value of max return portoflio
     PrevMinVar = PrevMinVar + PrevPriceArray(Prow, 1) * MinVarArray(Prow, 1)
 Next Prow
 
 For Irow = LBound(InvArray) To UBound(InvArray, 1)
     For Icol = LBound(InvArray) To UBound(InvArray, 2)
+        'Will be used to calculate the return based on open stock market days
         If InvArray(Irow, Icol) = SearchCRD Then
             
+        'Calulcates the % return to date
         ElseIf InvArray(Irow, Icol) = SearchRD Then
             InvArray(Irow, MaxRet) = CurrentMaxRet / PrevMaxRet - 1
             InvArray(Irow, MinVar) = CurrentMinVar / PrevMinVar - 1
+        'Calulcates the $ return to date
         ElseIf InvArray(Irow, Icol) = SearchDVR Then
             InvArray(Irow, MaxRet) = CurrentMaxRet - PrevMaxRet
             InvArray(Irow, MinVar) = CurrentMinVar - PrevMinVar
         End If
     Next Icol
 Next Irow
+'Place array onto worksheet
 AllSheet.Cells(Tablebegin, UBound(PortArray, 2) + 2).Resize(UBound(InvArray), UBound(InvArray, 2)).Value = InvArray
 AllSheet.Columns.AutoFit
+Call VisualMaintenance
 Application.ScreenUpdating = True
 Application.Calculation = xlAutomatic
 End Sub
 
+Sub json_price(APIkey, Stock, Price)
+'Downloads the stock data in a json format
+'Parses the necessary information(Date and Close Price) from the json file
 
-Sub Download_Csv(Price, Stock, APIkey)
-Dim TData As Variant, Dcol As Integer, Drow As Integer
-Dim TDC As Workbook, SDArray As Variant
-Dim sCSVLink As String, RPeriod As Double
-Dim ieApp As Object, Main As String, Row As Integer
+Dim intStringPosition1 As Long 'Finds the position of close prices
+Dim intCursorPosition1 As Long 'Where the search begins for close price in the _
+json file
 
-Row = 1
+Dim intCursorPosition2 As Long 'Finds the position of open price, to find the date
+Dim intStringPosition2 As Long 'Where the search begins for open price in the _
+json file
 
-Main = ActiveWorkbook.Name
-'the link needed to find the pricing data
-sCSVLink = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=" & Stock & "&apikey=" & APIkey & "&datatype=csv"
+Dim intCursorPosition3 As Long 'Finds the position of open price, to find the date
+Dim intStringPosition3 As Long 'Where the search begins for open price in the _
+json file
+Dim CountStringOccurances As Integer 'Keeps track of how many close prices exist _
+in the json file
 
-Set TDC = ActiveWorkbook 'define the active workbook to refer to later
+Dim i As Long 'Used to loop through each character in json file
+Dim cols As Integer 'Defines the number of columns in the array containing _
+close prices and dates
+Dim StockArray As Variant 'Contains close prices and dates for a stock from the _
+json file
 
-Workbooks.Open Filename:=sCSVLink 'open the link through internet explorer
-Application.Wait (Now + TimeValue("00:00:05")) 'temporary solution to ensure the stock data is fully downloaded
-Do Until ActiveWorkbook.Name <> Main
-    DoEvents
-Loop
-TData = ActiveSheet.UsedRange 'the csv is put into an array
-'will have greater than 3 columns if stock data exists
-Do Until UBound(TData, 1) >= 3
-    DoEvents
-    TData = ActiveSheet.UsedRange
-Loop
+Dim StringLookPrice As String
+Dim StringLookEnd As String 'Looks for the last string in the json file to _
+determine if it fully loads
+Dim StringLookFrequ As String 'Looks for specific string in json file for when the _
+api call is restricted
+Dim StringLookError As String 'Looks for specific string in json file for when the _
+api has no data for the stock being called
 
-'TData = ActiveSheet.UsedRange 'put the data from the csv file in an array
-ActiveWorkbook.Close 'close the workbook containing the data
-TDC.Activate 'Make the main workbook active
+Dim SDArray As Variant 'An array created of the worksheet of stock data
+Dim Ploc As Integer 'Where the information for close price and date are _
+located in json file relative to intstringposition
 
-For Dcol = UBound(TData, 2) To LBound(TData, 2) Step -1
-    If TData(Row, Dcol) = "close" Then
-        Price = TData(Row + 1, Dcol)
-        Exit For
+Dim URL As String, json As String, xmlHTTP As Object
+Dim posStart As Long, posEnd As Long, strClose As String
+
+cols = 3 ' 1 columns for close price, date, and return
+
+'Specific string in json file to look for to parse the necessary information
+
+StringLookError = "Error Message"
+StringLookEnd = "}"
+StringLookFrequ = "Information"
+StringLookPrice = "4. close"
+
+'Relative positions for close price and date in json
+Ploc = 12
+
+Price = 0
+
+'URL dependent on stock and apikey
+URL = "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=" & Stock & "&apikey=" & APIkey
+
+'Opens the URL to grab the HTTP text and store it in a string
+Set xmlHTTP = CreateObject("MSXML2.XMLHTTP")
+xmlHTTP.Open "GET", URL, False
+xmlHTTP.Send
+
+'Puts text into a string
+json = xmlHTTP.responseText
+
+'This loop handles errors when the text is not retrieved
+'The loop will end if there is no stock data for the particular stock _
+which is found from an error message
+For i = 0 To Len(json) 'Ensures no infite loop
+    'Finds number of charcters in the string
+    'If there are very few, likely an error message exists
+    If Len(json) < 1000 Then
+        intStringPosition1 = InStr(1, json, StringLookError) 'Looks specifically for Error message
+        intStringPosition2 = InStr(1, json, StringLookFrequ) 'Looks for restriction of api call message
+
+        'If the error message exists then the loop can be ended since _
+        no stock data exists
+        If intStringPosition1 <> 0 Then
+            Exit For
+        'If the information message exists then resend the HTTP request to get the stock data
+        ElseIf intStringPosition2 <> 0 Then
+            Set xmlHTTP = Nothing 'End current request
+            Application.Wait (Now + TimeValue("0:00:01")) 'Briefly wait to send request
+            'Send request and put the response back into string variable
+            Set xmlHTTP = CreateObject("MSXML2.XMLHTTP")
+            xmlHTTP.Open "GET", URL, False
+            xmlHTTP.Send
+            json = xmlHTTP.responseText
+        End If
+    'It's possible the entire file is not retrieved so this checks to see if the expected _
+    last string exists
+    Else
+        'Expected last string, can exit loop
+        If Right(json, 1) = StringLookEnd Then
+            Exit For
+            'Otherwise put the HTTP test into json variable again
+        Else
+            json = xmlHTTP.responseText
+        End If
     End If
-Next Dcol
+Next i
 
-Application.DisplayAlerts = False
-Application.DisplayAlerts = True
+'End request
+Set xmlHTTP = Nothing
 
+
+intCursorPosition3 = 1
+
+intStringPosition3 = InStr(intCursorPosition3, json, StringLookPrice)
+
+posStart = intStringPosition3 + Ploc 'Starting position of close price value
+posEnd = InStr(posStart, json, """") 'Finds the end of close price value
+strClose = Mid(json, posStart, posEnd - posStart) 'Extract value of close price
+Price = strClose 'Input close price into array
+    
 End Sub
+
+Sub VisualMaintenance()
+'Maintains the visualization of the data on the allocation worksheet
+Dim i As Integer, Asheet As Worksheet, AsheetArray As Variant
+Dim AllocationArray As Variant, y As Integer
+
+Set Asheet = Sheets("Allocation")
+
+Asheet.Select
+Asheet.UsedRange.ClearFormats 'Clear current formatting on sheet
+
+For i = 1 To 9 Step 8 'Beginning locations for both tables on sheet
+
+    AllocationArray = Cells(Tablebegin, i).CurrentRegion 'Finds size of a table depending on the beginning  location
+    
+    'Loops through each row of the tables and colours the row and outlines each cell within the row
+    For y = LBound(AllocationArray) + Tablebegin - 1 To UBound(AllocationArray, 1) + Tablebegin - 1
+    
+        If y Mod 2 = 1 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+        ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+        'Since there are 3 rows below where the stock symbols end, these need to be managed based on their location _
+        from the last column of the table
+        ElseIf y Mod 2 = 1 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+        ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+        End If
+        
+        'Adds outline around each cell in a row
+        If IsEmpty(Cells(y, i)) = False Then 'Before the rows not containing a stock symbol
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+        ElseIf IsEmpty(Cells(y, i)) = True Then 'when the rows do not contain a stock symbol
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+        End If
+        
+    Next y
+    
+    'Centers each column heading and value, except for the column containing stock symbols
+    Range(Cells(Tablebegin, i + 1), Cells(UBound(AllocationArray, 1) + Tablebegin - 1, UBound(AllocationArray, 2) + i - 1)).HorizontalAlignment = xlCenter
+    
+    'Thick outline of table headings
+    Range(Cells(Tablebegin, i), Cells(Tablebegin, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    'Thick outline of stock symbols
+    Range(Cells(Tablebegin, i), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+    'Thick outline of table contents
+    Range(Cells(Tablebegin + 1, i + 1), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    'Thick outline of contents of section at the bottom of the main table
+    Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 2), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+    'Thick outline of row headings of contents at the bottom of the main table
+    Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 3), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 3)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+Next i
+Asheet.Columns.AutoFit 'Ensures all the headings and contents can be seen
+Cells(1, 1).Select 'Reposition curser
+End Sub
+
 
