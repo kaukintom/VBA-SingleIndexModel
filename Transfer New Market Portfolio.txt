@@ -8,6 +8,7 @@ Const SDRowBegin = 3
 Const IndexBegin = 4
 
 Sub Transfer_Table()
+'Transfer the newest table generated from Portoflio calculation procedure
 Dim AllSheet As Worksheet, AllSheetArray As Variant
 Dim SymArray As Variant, PriceArray As Variant, MaxRetArray As Variant, MinVarArray As Variant
 Dim SearchSym As String, SearchMaxRet As String, SearchMinVar As String
@@ -15,9 +16,11 @@ Dim Allcol As Integer, Allrow As Integer, UpDateArray As Variant
 Dim SearchCRD As String, SearchRD As String, SearchDVR As String, SearchPrice As String
 Dim InvInfo As Variant
 
+'Define worksheet where table will be transfered
 Set AllSheet = Sheets("Allocation")
 AllSheet.Select
 
+'Column and row headings for table
 SearchCRD = "Current Return (Daily)"
 SearchRD = "Return to Date"
 SearchDVR = "Dollar Value Return"
@@ -26,29 +29,38 @@ SearchPrice = "Price"
 SearchMaxRet = "Max Ret Allocation"
 SearchMinVar = "Min Var Allocation"
 
+'Want the first of two tables on this sheet
 AllSheetArray = AllSheet.Cells(Tablebegin, 1).CurrentRegion
-InvInfo = AllSheet.Cells(1, 1).CurrentRegion
+InvInfo = AllSheet.Cells(1, 1).CurrentRegion 'Investment amount
 
+'Find where the table has the first row in the first column with no values
 For Allrow = LBound(AllSheetArray) To UBound(AllSheetArray, 1)
+    'When the empty cell is found, exit for so the row variable can be used
     If IsEmpty(AllSheetArray(Allrow + 1, 1)) = True Then
         Exit For
     End If
 Next Allrow
 
+'Creates arrays of various data columns based on the specific string that matches the column headings
 For Allcol = LBound(AllSheetArray) To UBound(AllSheetArray, 2)
     If AllSheetArray(1, Allcol) = SearchSym Then
+        'Ticker symbols
         SymArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
     ElseIf AllSheetArray(1, Allcol) = SearchPrice Then
+        'Latest price of stock
         PriceArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
     ElseIf AllSheetArray(1, Allcol) = SearchMaxRet Then
+        'Portoflio allocation for maximum return
         MaxRetArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
     ElseIf AllSheetArray(1, Allcol) = SearchMinVar Then
+        'Portoflio allocation for minimum variance
         MinVarArray = Range(Cells(Tablebegin, Allcol), Cells(Tablebegin + Allrow - 1, Allcol))
     End If
 Next Allcol
 
-AllSheet.UsedRange.Delete
+AllSheet.UsedRange.Delete 'Delete everything on sheet
 
+'Recreate the sheet with the old table of table and the data moved into the second table next to it
 AllSheet.Cells(Tablebegin, 1).Resize(UBound(AllSheetArray), UBound(AllSheetArray, 2)).Value = AllSheetArray
 AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 2).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = SymArray
 AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 3).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = PriceArray
@@ -56,11 +68,83 @@ AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 4).Value = "Current Price"
 AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 5).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = MaxRetArray
 AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 6).Resize(UBound(SymArray), UBound(SymArray, 2)).Value = MinVarArray
 
+'Takes the parts of the previous table that were put into arrays and then combined and tosses it into array _
+of the entire table
 UpDateArray = AllSheet.Cells(Tablebegin, UBound(AllSheetArray, 2) + 2).CurrentRegion
 
+'Place column headings onto worksheet
 AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin, UBound(AllSheetArray, 2) + 4).Value = SearchCRD
 AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin + 1, UBound(AllSheetArray, 2) + 4).Value = SearchRD
 AllSheet.Cells(UBound(UpDateArray, 1) + Tablebegin + 2, UBound(AllSheetArray, 2) + 4).Value = SearchDVR
 AllSheet.Cells(1, 1).Resize(UBound(InvInfo), UBound(InvInfo, 2)).Value = InvInfo
 
+Call VisualMaintenance
+
 End Sub
+
+Sub VisualMaintenance()
+'Maintains the visualization of the data on the allocation worksheet
+Dim i As Integer, Asheet As Worksheet, AsheetArray As Variant
+Dim AllocationArray As Variant, y As Integer
+
+Set Asheet = Sheets("Allocation")
+
+Asheet.Select
+Asheet.UsedRange.ClearFormats 'Clear current formatting on sheet
+
+For i = 1 To 9 Step 8 'Beginning locations for both tables on sheet
+
+    AllocationArray = Cells(Tablebegin, i).CurrentRegion 'Finds size of a table depending on the beginning  location
+    
+    'Loops through each row of the tables and colours the row and outlines each cell within the row
+    For y = LBound(AllocationArray) + Tablebegin - 1 To UBound(AllocationArray, 1) + Tablebegin - 1
+    
+        If y Mod 2 = 1 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+        ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+        'Since there are 3 rows below where the stock symbols end, these need to be managed based on their location _
+        from the last column of the table
+        ElseIf y Mod 2 = 1 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+        ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+        End If
+        
+        'Adds outline around each cell in a row
+        If IsEmpty(Cells(y, i)) = False Then 'Before the rows not containing a stock symbol
+            Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+        ElseIf IsEmpty(Cells(y, i)) = True Then 'when the rows do not contain a stock symbol
+            Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+        End If
+        
+    Next y
+    
+    'Centers each column heading and value, except for the column containing stock symbols
+    Range(Cells(Tablebegin, i + 1), Cells(UBound(AllocationArray, 1) + Tablebegin - 1, UBound(AllocationArray, 2) + i - 1)).HorizontalAlignment = xlCenter
+    
+    'Thick outline of table headings
+    Range(Cells(Tablebegin, i), Cells(Tablebegin, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    'Thick outline of stock symbols
+    Range(Cells(Tablebegin, i), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+    'Thick outline of table contents
+    Range(Cells(Tablebegin + 1, i + 1), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+    'Thick outline of contents of section at the bottom of the main table
+    Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 2), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+    'Thick outline of row headings of contents at the bottom of the main table
+    Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 3), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 3)).BorderAround _
+    ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+
+Next i
+Asheet.Columns.AutoFit 'Ensures all the headings and contents can be seen
+Cells(1, 1).Select 'Reposition curser
+End Sub
+
