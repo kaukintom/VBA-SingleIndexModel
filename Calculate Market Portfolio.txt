@@ -494,40 +494,12 @@ For ACrow = LBound(ArrayCorrection) To UBound(ArrayCorrection, 1)
         ACrow = ACrow - 1
     End If
 Next ACrow
-
+ArrayCorrection = AllSheet.Cells(Tablebegin, ColBegin).CurrentRegion
+If IsEmpty(AllSheetArray) = False Then
+    AllSheet.Cells(Tablebegin, UBound(ArrayCorrection, 2) + 2).Resize(UBound(AllSheetArray), UBound(AllSheetArray, 2)).Value = AllSheetArray
+End If
 MoveOver = 6
-With AllSheet
-    .Select
-    If IsEmpty(AllSheetArray) = False Then
-        Cells(Tablebegin, MinVar + 2).Resize(UBound(AllSheetArray), UBound(AllSheetArray, 2)).Value = AllSheetArray
-        
-        Range(Cells(UBound(AllSheetArray, 1) + Tablebegin - 3, MaxRet - 1 + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
-        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
-        
-        Range(Cells(Tablebegin, MaxRet + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MaxRet + MoveOver)).BorderAround _
-        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
-        
-        Range(Cells(Tablebegin, MinVar + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
-        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
-        
-        Range(Cells(Tablebegin + 1, MaxRet + MoveOver), Cells(UBound(AllSheetArray, 1) + Tablebegin - 1, MinVar + MoveOver)).BorderAround _
-        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
-    End If
-    .Columns.AutoFit
-    .UsedRange.HorizontalAlignment = xlCenter
-    ArrayCorrection = AllSheet.UsedRange
-    For Arow = LBound(ArrayCorrection) To UBound(ArrayCorrection, 1)
-        For Acol = LBound(ArrayCorrection) To UBound(ArrayCorrection, 2)
-            If ArrayCorrection(Arow, Acol) = SearchSym Then
-                Cells(Arow, Acol).EntireColumn.HorizontalAlignment = xlLeft
-                SymCount = SymCount + 1
-            End If
-            If SymCount = 2 Then Exit For
-        Next Acol
-        If SymCount = 2 Then Exit For
-    Next Arow
-
-End With
+Call VisualMaintenance
 
 End Sub
 
@@ -770,84 +742,32 @@ AllSheet.Select
 End Sub
 
 Sub AllocationPeriod()
-Dim SDSheet As Worksheet
-Dim HistData As Variant
-Dim html As Variant
-Dim ScrollDown As Integer, Trow As Integer
-Dim Div As Integer, Stock As String
-Dim Row As Integer, Col As Integer
-Dim Tlist As Variant, SLSheet As Worksheet
-Dim TData As Variant, TlistI As Variant, Tcol As Integer
-Dim BSLrow As Integer, GSLrow As Integer, Inclusion As Integer
-Dim APIkey As Variant, STable As Worksheet, Class As Integer
-Dim Clist As Variant, Crow As Integer, CorT As Boolean, AllPer As Integer
-Dim UpperDate As String, LowerDate As String, LDArray As Variant, DateArray As Variant
-Dim PrevDate As Integer, SkipDate As Boolean, CutoffDate As String, SDArray As Variant
-Dim SDrow As Integer
-'reference point for locations on worksheet
-'Set names for worksheets
+Dim SDSheet As Worksheet 'Stock Data worksheet
+Dim DateCol As Integer 'The space between columns containing the date value
+Dim SDrow As Integer, SDcol As Integer 'Variables for rows and columns in for loops
+Dim i As Integer 'Control starting location for analyzing date strings
+Dim SDArray As Variant 'Array of stock data worksheet
+Dim objdate1 As Date 'Allows comparison of dates
+Dim objdate2 As Date, Allper As Integer
+Dim SLSheet As Worksheet, DayCount As Integer
+
 Set SDSheet = Sheets("Stock Data")
 Set SLSheet = Sheets("Stock List")
-
-'arbitrary starting position
-Row = 1
-Col = 1
-
-'Array of Stock Data sheet
-SDSheet.Select
 SDArray = SDSheet.UsedRange
 
-'period of how far back to look (in months)
-AllPer = SLSheet.Cells(4, 2)
+Allper = SLSheet.Cells(4, 2).Value
+objdate1 = CDate(SDArray(LBound(SDArray, 1) + 2, 1))
+objdate2 = DateAdd("m", -Allper, objdate1)
 
-UpperDate = SDArray(Row + 2, Col) 'most recent date of stock data
-LDArray = Split(UpperDate, "-") 'split date to determine year/month/day
-SkipDate = False
-LowerDate = CInt(LDArray(LBound(LDArray) + 1)) - AllPer 'changes month component to refelct how far back to _
-look
-
-If LowerDate < 1 Then 'if the month is less than 1 (cant have a 0 or -ve number for any date component) _
-then the year is moved back 1 and the add the negative component to 12 to represent the previous year
-    LowerDate = 12 + LowerDate
-    LDArray(LBound(LDArray)) = CInt(LDArray(LBound(LDArray))) - 1 'year is hte first component, have to subtract _
-    it by 1
-    LDArray(LBound(LDArray) + 1) = LowerDate 'month is the middle compnent
-End If
-
-'Go through each row in the stock data array in the first column (contains dates)
-For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 2)
-    ' the date is split apart to analyze the components
-    DateArray = Split(SDArray(SDrow, 1), "-")
-    If CInt(DateArray(LBound(DateArray) + 1)) = LowerDate Then 'if the month in the date is exactly what matches the _
-    amount of months to look in the past, then the day component can now be analyzed and the cutoff date for stock _
-    data can be found
-        If CInt(DateArray(UBound(DateArray))) = CInt(LDArray(UBound(LDArray))) Then 'the exact day, in LowerDate
-            CutoffDate = SDArray(SDrow + 1, 1)
-
-            Exit For
-        ElseIf CInt(DateArray(UBound(DateArray))) < CInt(LDArray(UBound(LDArray))) Then 'if the date in the month is now below the actual _
-        day (ex. could corrospond ot a weekend so there is no date for exact amount of months back)
-            CutoffDate = SDArray(SDrow + 1, 1)
-
-            Exit For
-        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) < CInt(LDArray(UBound(LDArray) - 1)) Then
-            'if the next available date could be in the previous month, which would occur if the previous 2 conditions _
-            are passed on, so the date would be higher, and month lower than the exact date, months back
-            CutoffDate = SDArray(SDrow + 1, 1)
-
-            Exit For
-        ElseIf CInt(DateArray(UBound(DateArray))) > CInt(LDArray(UBound(LDArray))) And CInt(DateArray(UBound(DateArray) - 1)) > CInt(LDArray(UBound(LDArray) - 1)) And CInt(LDArray(UBound(LDArray) - 1)) = 1 Then
-            'in case the month back goes into the previous year, then the year, month and day all need to change where _
-            year is less, and month and day are both higher
-            CutoffDate = SDArray(SDrow + 1, 1)
-
-            Exit For
-        End If
+DayCount = 0
+For SDrow = LBound(SDArray) + 2 To UBound(SDArray, 1)
+    If DateDiff("d", objdate2, CDate(SDArray(SDrow, 1))) < 0 Then
+        Exit For
+    Else
+        DayCount = DayCount + 1
     End If
 Next SDrow
-SLSheet.Select
-SLSheet.Cells(5, 2).Value = SDrow - 2
-
+SLSheet.Cells(5, 2).Value = DayCount
 End Sub
 
 Sub WorksheetMaintain()
@@ -894,3 +814,71 @@ For Trow = Tablebegin To UBound(Tlist, 1)
 Next Trow
 
 End Sub
+
+Sub VisualMaintenance()
+'Maintains the visualization of the data on the allocation worksheet
+Dim i As Integer, Asheet As Worksheet, AsheetArray As Variant
+Dim AllocationArray As Variant, y As Integer
+
+Set Asheet = Sheets("Allocation")
+
+Asheet.Select
+Asheet.UsedRange.ClearFormats 'Clear current formatting on sheet
+
+For i = 1 To 9 Step 8 'Beginning locations for both tables on sheet
+    
+    AllocationArray = Cells(Tablebegin, i).CurrentRegion 'Finds size of a table depending on the beginning  location
+    If IsEmpty(AllocationArray) = False Then
+        'Loops through each row of the tables and colours the row and outlines each cell within the row
+        For y = LBound(AllocationArray) + Tablebegin - 1 To UBound(AllocationArray, 1) + Tablebegin - 1
+        
+            If y Mod 2 = 1 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+                Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+            ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = False Then 'For even numbers the row is coloured blue
+                Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+            'Since there are 3 rows below where the stock symbols end, these need to be managed based on their location _
+            from the last column of the table
+            ElseIf y Mod 2 = 1 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+                Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(190, 220, 255)
+            ElseIf y Mod 2 = 0 And IsEmpty(Cells(y, i)) = True Then 'For even numbers the row is coloured blue
+                Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Interior.Color = RGB(255, 255, 255)
+            End If
+            
+            'Adds outline around each cell in a row
+            If IsEmpty(Cells(y, i)) = False Then 'Before the rows not containing a stock symbol
+                Range(Cells(y, i), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+            ElseIf IsEmpty(Cells(y, i)) = True Then 'when the rows do not contain a stock symbol
+                Range(Cells(y, i + UBound(AllocationArray, 2) - 3), Cells(y, i + UBound(AllocationArray, 2) - 1)).Borders.LineStyle = xlContinuous
+            End If
+            
+        Next y
+        
+        'Centers each column heading and value, except for the column containing stock symbols
+        Range(Cells(Tablebegin, i + 1), Cells(UBound(AllocationArray, 1) + Tablebegin - 1, UBound(AllocationArray, 2) + i - 1)).HorizontalAlignment = xlCenter
+        
+        'Thick outline of table headings
+        Range(Cells(Tablebegin, i), Cells(Tablebegin, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        'Thick outline of stock symbols
+        Range(Cells(Tablebegin, i), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+        'Thick outline of table contents
+        Range(Cells(Tablebegin + 1, i + 1), Cells(Tablebegin + UBound(AllocationArray, 1) - 4, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+        
+        'Thick outline of contents of section at the bottom of the main table
+        Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 2), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 1)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    
+        'Thick outline of row headings of contents at the bottom of the main table
+        Range(Cells(Tablebegin + UBound(AllocationArray, 1) - 3, i + UBound(AllocationArray, 2) - 3), Cells(Tablebegin + UBound(AllocationArray, 1) - 1, i + UBound(AllocationArray, 2) - 3)).BorderAround _
+        ColorIndex:=xlColorIndexAutomatic, Weight:=xlMedium
+    End If
+Next i
+Asheet.Columns.AutoFit 'Ensures all the headings and contents can be seen
+Cells(1, 1).Select 'Reposition curser
+End Sub
+
+
