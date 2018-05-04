@@ -27,8 +27,7 @@ Can receive an API key from alphavantage.com or https://www.alphavantage.co/supp
 Module: Collect_Stock_Data<br />
 Sub Procedure: TickerDataCollect
  - Collects stock and index data from Alpha Vantage from API key
- - Drawback: Currently uses a fixed 5 second delay per a security to allow the csv to open and display the data
-  - Time consuming
+ - Can take a while to gather all the stock data (Approximately 10 minutes for the S&amp;P/TSX Composite index)
   
 Module: Portfolio<br />
 Sub Procedure: OLSRegression
