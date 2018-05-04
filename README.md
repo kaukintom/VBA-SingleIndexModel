@@ -2,10 +2,10 @@
 Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite index) using Alpha Vantage API keys and then calculates the market portfolio and the integer values of how much to invest in each stock.
 # Version 2
 1. Sub Procedure TickerDataCollect() performs much faster, can gather the data of the example list of stocks from the S&amp;P/TSX Composite index in less than 10 minutes
-  - Gathers data from a json format instead of csv
+    - Gathers data from a json format instead of csv
 2. Fixed issues with the dates not aligning among stocks, making the OLS regression unreliable
-  - Stocks are not included if portions of the data are missing
-  - If a date of data is missing, where the date exists for another stock, the date is added to the stock where it does not exist for, and the stock price associated with that date is its previous close price
+    - Stocks are not included if portions of the data are missing
+    - If a date of data is missing, where the date exists for another stock, the date is added to the stock where it does not exist for, and the stock price associated with that date is its previous close price
 3. The visuals and maintenance of the worksheets "Stock List" and "Stock Data" have been improved
 # API key
 Can receive an API key from alphavantage.com or https://www.alphavantage.co/support/#api-key 
@@ -45,7 +45,7 @@ Sub Procedure: GetPriceData
  - Update the table saved from Transfer_Table with the most current price data
  - Calculates the return to date and dollar value return
 # How to Use
-1.	On the “Stock List” worksheet in the excel file, the columns “Symbol” and “Index” need to filled in
+1.	On the “Stock List” worksheet in the excel file, the columns “Symbol” and “Index” need to be filled in
     - Ex. Each stock from S&amp;P/TSX Composite index is put under the symbol column, and the index symbol is put in the index column next to the symbol
     - Also, each stock symbol needs to include the exchange symbol as well (Ex. .TO for Toronto Stock Exchange – GUY.TO)
 2.	Download the stock data through the API key from Alpha Vantage using the TickerDataCollect sub procedure
