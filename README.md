@@ -1,11 +1,18 @@
 # VBA-SingleIndexModel
 Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite index) using Alpha Vantage API keys and then calculates the market portfolio and the integer values of how much to invest in each stock.
+# Version 2
+1. Sub Procedure TickerDataCollect() performs much faster, can gather the data of the example list of stocks from the S&amp;P/TSX Composite index in less than 10 minutes
+  - Gathers data from a json format instead of csv
+2. Fixed issues with the dates not aligning among stocks, making the OLS regression unreliable
+  - Stocks are not included if portions of the data are missing
+  - If a date of data is missing, where the date exists for another stock, the date is added to the stock where it does not exist for, and the stock price associated with that date is its previous close price
+3. The visuals and maintenance of the worksheets "Stock List" and "Stock Data" have been improved
 # API key
 Can receive an API key from alphavantage.com or https://www.alphavantage.co/support/#api-key 
 # Data Used
 - Daily adjusted close return data for all calculations to determine % allocation
 - Daily close price (not adjusted) used for integer allocation
-- Up to 4 months of return data is used (can choose to use 1 to 4 months in portfolio analysis)
+- Up to 4 months of return data is used (can choose to use up to 4 months of portfolio analysis)
 - Risk free rate (Rf) determined from Bank of Canada T-Bill rates at https://www.bankofcanada.ca/rates/interest-rates/t-bill-yields/
   - T-Bill rate is converted to a daily return based average number of data points from daily stock returns in a year
 # Calculations
@@ -51,3 +58,4 @@ Sub Procedure: GetPriceData
 
 # Acknowledgements
 McMaster University: Commerce 4FF3 - Portfolio Theory and Management
+https://stackoverflow.com/questions/47239717/alpha-vantage-using-excel-vba-to-pull-data-from-csv-file - Used to find a way to download the json formatted stock data
