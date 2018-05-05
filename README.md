@@ -18,7 +18,7 @@ Can receive an API key from alphavantage.com or https://www.alphavantage.co/supp
 # Calculations
 - OLS regression between each stock and the index is used to determine alpha (𝜶<sub>i</sub>)  and beta (Β<sub>i</sub>)
 - Variance of a stock determined by  Β<sup>2</sup><sub>ie</sub>𝝈<sup>2</sup><sub>m</sub>+𝝈<sup>2</sup><sub>ie</sub>
-- covariance between stocks determined by  Β<sub>i</sub>Β<sub>j</sub>𝝈<sup>2</sup><sub>m</sub>
+- Covariance between stocks determined by  Β<sub>i</sub>Β<sub>j</sub>𝝈<sup>2</sup><sub>m</sub>
 - Phi (𝚽) = (𝝈<sup>2</sup><sub>m</sub>∑<sup>n</sup><sub>j=1</sub>Β<sub>j</sub>(µ<sub>j</sub> − Rf)/𝝈<sup>2</sup><sub>je</sub>)/(1+𝝈<sup>2</sup><sub>m</sub>∑<sup>n</sup><sub>j=1</sub>B<sup>2</sup><sub>j</sub>/𝝈<sup>2</sup><sub>ie</sub>)
 - For short selling to not be permitted, securities are ranked by excess returns over beta ((µ<sub>1</sub>-Rf)/(Β<sub>1</sub>))
   - Securities are added until 𝚽 is maximized
