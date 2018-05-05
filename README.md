@@ -1,7 +1,7 @@
 # VBA-SingleIndexModel
 Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite index) using Alpha Vantage API keys and then calculates the market portfolio and the integer values of how much to invest in each stock.
 # Version 2
-1. Sub Procedure TickerDataCollect() performs much faster, can gather the data of the example list of stocks from the S&amp;P/TSX Composite index in less than 10 minutes
+1. Sub Procedure TickerDataCollect() performs much faster, can gather the data of the list of stocks from the S&amp;P/TSX Composite index in less than 10 minutes
     - Gathers data from a json format instead of csv
 2. Fixed issues with the dates not aligning among stocks, making the OLS regression unreliable
     - Stocks are not included if portions of the data are missing
