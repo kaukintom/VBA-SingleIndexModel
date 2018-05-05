@@ -26,7 +26,7 @@ Can receive an API key from alphavantage.com or https://www.alphavantage.co/supp
 # VBA
 Module: Collect_Stock_Data<br />
 Sub Procedure: TickerDataCollect
- - Collects stock and index data from Alpha Vantage from API key
+ - Collects stock and index data from Alpha Vantage using an API key
  - Can take a while to gather all the stock data (Approximately 10 minutes for the S&amp;P/TSX Composite index)
   
 Module: Portfolio<br />
