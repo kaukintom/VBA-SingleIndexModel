@@ -53,7 +53,7 @@ Sub Procedure: GetPriceData
     - Must provide a risk-free rate (obtained from Bank of Canada T-Bills as an annual rate, OLSRegression will turn it into a daily rate) 
     - Must provide an investment amount and time frame (1 to 4 months)
 4.	Can choose to keep table produced from OLSRegression by using the Transfer_Table sub procedure 
-5.	If Table is kept, can use the GetPriceData sub procedure to update the new prices of the stocks to calculate portfolio return
+5.	If table is kept, can use the GetPriceData sub procedure to update the new prices of the stocks to calculate portfolio return
 
 # Acknowledgements
 McMaster University: Commerce 4FF3 - Portfolio Theory and Management
