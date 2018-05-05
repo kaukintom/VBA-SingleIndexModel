@@ -3,7 +3,7 @@ Download stock data to a particular Index (ex. ^GSPTSE - S&amp;P/TSX Composite i
 # Version 2
 1. Sub Procedure TickerDataCollect() performs much faster, can gather the data of the list of stocks from the S&amp;P/TSX Composite index in less than 10 minutes
     - Gathers data from a json format instead of csv
-2. Fixed issues with the dates not aligning among stocks, making the OLS regression unreliable
+2. Fixed issues with the dates not aligning among stocks, which made the OLS regression unreliable
     - Stocks are not included if portions of the data are missing
     - If a date of data is missing, where the date exists for another stock, the date is added to the stock where it does not exist for, and the stock price associated with that date is its previous close price
 3. The visual maintenance of the worksheets "Stock List" and "Stock Data" has been improved
